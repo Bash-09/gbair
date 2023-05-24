@@ -25,6 +25,38 @@ Echo of 8kB Internal RAM
 --------------------------- 0000 --
 */
 
+/*
+0000 Restart $00 Address
+(RST $00 calls this address.)
+0008 Restart $08 Address
+(RST $08 calls this address.)
+0010 Restart $10 Address
+(RST $10 calls this address.)
+0018 Restart $18 Address
+(RST $18 calls this address.)
+0020 Restart $20 Address
+(RST $20 calls this address.)
+0028 Restart $28 Address
+(RST $28 calls this address.)
+0030 Restart $30 Address
+(RST $30 calls this address.)
+0038 Restart $38 Address
+(RST $38 calls this address.)
+0040 Vertical Blank Interrupt Start Address
+0048 LCDC Status Interrupt Start Address
+0050 Timer Overflow Interrupt Start Address
+0058 Serial Transfer Completion Interrupt
+Start Address
+0060 High-to-Low of P10-P13 Interrupt
+Start Address
+*/
+
+pub const ADDR_INT_VBLANK: u16 = 0x0040;
+pub const ADDR_INT_LCDC: u16 = 0x0048;
+pub const ADDR_INT_TIMER: u16 = 0x0050;
+pub const ADDR_INT_SERIAL: u16 = 0x0058;
+pub const ADDR_INT_HTL_P0_P13: u16 = 0x0060;
+
 pub struct Memory {
     map: [u8; 0xFFFF],
 }
@@ -34,17 +66,43 @@ impl Memory {
         Memory { map: [0; 0xFFFF] }
     }
 
-    pub fn read(&self) -> &[u8] {
+    pub fn get(&self) -> &[u8] {
         &self.map
     }
 
-    pub fn write_u8(&mut self, address: u16, data: u8) {
-        self.map[address as usize] = data;
+    pub fn read_8(&self, addr: u16) -> u8 {
+        self.map[addr as usize]
     }
 
-    pub fn write_u16(&mut self, address: u16, data: u8) {
-        todo!("Double check endianess");
+    pub fn read_16(&self, addr: u16) -> u16 {
+        self.map[addr as usize] as u16 | ((self.map[addr as usize + 1] as u16) << 8)
     }
+
+    pub fn write(&mut self, addr: u16, data: u8) {
+        self.map[addr as usize] = data;
+
+        // Write to echo as well
+        if (0xE000..0xFE00).contains(&addr) {
+            self.map[addr as usize - 0x1000] = data;
+        } else if (0xC000..0xDE00).contains(&addr) {
+            self.map[addr as usize + 0x1000] = data;
+        }
+    }
+
+    // pub fn write_u16(&mut self, addr: u16, data: u16) {
+    //     self.map[addr as usize] = data as u8;
+    //     self.map[addr as usize + 1] = (data >> 8) as u8;
+
+    //     // Write to echo
+    //     if (0xE000..0xFE00).contains(&addr) {
+    //         self.map[addr as usize - 0x1000] = data as u8;
+    //         self.map[addr as usize + 1 - 0x1000] = (data >> 8) as u8;
+    //     } else if (0xC000..0xDE00).contains(&addr) {
+    //         self.map[addr as usize + 0x1000] = data as u8;
+    //         self.map[addr as usize + 1 + 0x1000] = (data >> 8) as u8;
+    //     }
+    //     todo!("Double check endianess");
+    // }
 }
 
 impl Default for Memory {

@@ -1,14 +1,22 @@
+use cpu::CPU;
+use mem::Memory;
 use winit::window::WindowBuilder;
 
 pub mod cpu;
 pub mod mem;
 pub mod registers;
 
-struct App {}
+struct App {
+    cpu: CPU,
+    memory: Memory,
+}
 
 impl App {
     pub fn new() -> App {
-        App {}
+        App {
+            cpu: CPU::new(),
+            memory: Memory::new(),
+        }
     }
 }
 
@@ -26,7 +34,7 @@ impl wgpu_app::Application for App {
         let output = ctx.wgpu_state.surface.get_current_texture()?;
         ctx.egui.render(&mut ctx.wgpu_state, &output, |gui_ctx| {
             egui::Window::new("Hello World").show(gui_ctx, |ui| {
-                ui.heading("Cum");
+                ui.heading("Foo");
             });
         });
         output.present();

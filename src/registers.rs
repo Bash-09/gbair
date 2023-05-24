@@ -1,3 +1,27 @@
+use std::ops::{Index, IndexMut};
+
+#[derive(Clone, Copy, Debug)]
+pub enum REG {
+    A,
+    F,
+    B,
+    C,
+    D,
+    E,
+    H,
+    L,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum REG_WIDE {
+    AF,
+    BC,
+    DE,
+    HL,
+    SP,
+    PC,
+}
+
 pub struct Registers {
     af: RegisterUnion,
     bc: RegisterUnion,
@@ -5,7 +29,6 @@ pub struct Registers {
     hl: RegisterUnion,
     sp: u16,
     pc: u16,
-    fl: Flags,
 }
 
 pub struct Flags {
@@ -31,6 +54,71 @@ impl RegisterUnion {
     }
 }
 
+impl Index<REG> for Registers {
+    type Output = u8;
+
+    fn index(&self, index: REG) -> &Self::Output {
+        unsafe {
+            match index {
+                REG::A => &self.af.pair.r1,
+                REG::F => &self.af.pair.r2,
+                REG::B => &self.bc.pair.r1,
+                REG::C => &self.bc.pair.r2,
+                REG::D => &self.de.pair.r1,
+                REG::E => &self.de.pair.r2,
+                REG::H => &self.hl.pair.r1,
+                REG::L => &self.hl.pair.r2,
+            }
+        }
+    }
+}
+impl IndexMut<REG> for Registers {
+    fn index_mut(&mut self, index: REG) -> &mut Self::Output {
+        unsafe {
+            match index {
+                REG::A => &mut self.af.pair.r1,
+                REG::F => &mut self.af.pair.r2,
+                REG::B => &mut self.bc.pair.r1,
+                REG::C => &mut self.bc.pair.r2,
+                REG::D => &mut self.de.pair.r1,
+                REG::E => &mut self.de.pair.r2,
+                REG::H => &mut self.hl.pair.r1,
+                REG::L => &mut self.hl.pair.r2,
+            }
+        }
+    }
+}
+impl Index<REG_WIDE> for Registers {
+    type Output = u16;
+
+    fn index(&self, index: REG_WIDE) -> &Self::Output {
+        unsafe {
+            match index {
+                REG_WIDE::AF => &self.af.combined,
+                REG_WIDE::BC => &self.bc.combined,
+                REG_WIDE::DE => &self.de.combined,
+                REG_WIDE::HL => &self.hl.combined,
+                REG_WIDE::SP => &self.sp,
+                REG_WIDE::PC => &self.pc,
+            }
+        }
+    }
+}
+impl IndexMut<REG_WIDE> for Registers {
+    fn index_mut(&mut self, index: REG_WIDE) -> &mut Self::Output {
+        unsafe {
+            match index {
+                REG_WIDE::AF => &mut self.af.combined,
+                REG_WIDE::BC => &mut self.bc.combined,
+                REG_WIDE::DE => &mut self.de.combined,
+                REG_WIDE::HL => &mut self.hl.combined,
+                REG_WIDE::SP => &mut self.sp,
+                REG_WIDE::PC => &mut self.pc,
+            }
+        }
+    }
+}
+
 impl Registers {
     pub fn new() -> Registers {
         Registers {
@@ -40,141 +128,7 @@ impl Registers {
             hl: RegisterUnion::default(),
             sp: 0,
             pc: 0,
-            fl: Flags { flags: 0 },
         }
-    }
-
-    pub fn a(&self) -> u8 {
-        unsafe { self.af.pair.r1 }
-    }
-    pub fn f(&self) -> u8 {
-        unsafe { self.af.pair.r2 }
-    }
-    pub fn b(&self) -> u8 {
-        unsafe { self.bc.pair.r1 }
-    }
-    pub fn c(&self) -> u8 {
-        unsafe { self.bc.pair.r2 }
-    }
-    pub fn d(&self) -> u8 {
-        unsafe { self.de.pair.r1 }
-    }
-    pub fn e(&self) -> u8 {
-        unsafe { self.de.pair.r2 }
-    }
-    pub fn h(&self) -> u8 {
-        unsafe { self.hl.pair.r1 }
-    }
-    pub fn l(&self) -> u8 {
-        unsafe { self.hl.pair.r2 }
-    }
-    pub fn af(&self) -> u16 {
-        unsafe { self.af.combined }
-    }
-    pub fn bc(&self) -> u16 {
-        unsafe { self.bc.combined }
-    }
-    pub fn de(&self) -> u16 {
-        unsafe { self.de.combined }
-    }
-    pub fn hl(&self) -> u16 {
-        unsafe { self.hl.combined }
-    }
-    pub fn sp(&self) -> u16 {
-        self.sp
-    }
-    pub fn pc(&self) -> u16 {
-        self.pc
-    }
-    pub fn a_mut(&mut self) -> &mut u8 {
-        unsafe { &mut self.af.pair.r1 }
-    }
-    pub fn f_mut(&mut self) -> &mut u8 {
-        unsafe { &mut self.af.pair.r2 }
-    }
-    pub fn b_mut(&mut self) -> &mut u8 {
-        unsafe { &mut self.bc.pair.r1 }
-    }
-    pub fn c_mut(&mut self) -> &mut u8 {
-        unsafe { &mut self.bc.pair.r2 }
-    }
-    pub fn d_mut(&mut self) -> &mut u8 {
-        unsafe { &mut self.de.pair.r1 }
-    }
-    pub fn e_mut(&mut self) -> &mut u8 {
-        unsafe { &mut self.de.pair.r2 }
-    }
-    pub fn h_mut(&mut self) -> &mut u8 {
-        unsafe { &mut self.hl.pair.r1 }
-    }
-    pub fn l_mut(&mut self) -> &mut u8 {
-        unsafe { &mut self.hl.pair.r2 }
-    }
-    pub fn af_mut(&mut self) -> &mut u16 {
-        unsafe { &mut self.af.combined }
-    }
-    pub fn bc_mut(&mut self) -> &mut u16 {
-        unsafe { &mut self.bc.combined }
-    }
-    pub fn de_mut(&mut self) -> &mut u16 {
-        unsafe { &mut self.de.combined }
-    }
-    pub fn hl_mut(&mut self) -> &mut u16 {
-        unsafe { &mut self.hl.combined }
-    }
-    pub fn sp_mut(&mut self) -> &mut u16 {
-        &mut self.sp
-    }
-    pub fn pc_mut(&mut self) -> &mut u16 {
-        &mut self.pc
-    }
-    pub fn write_a(&mut self, val: u8) {
-        self.af.pair.r1 = val;
-    }
-    pub fn write_f(&mut self, val: u8) {
-        self.af.pair.r2 = val;
-    }
-    pub fn write_b(&mut self, val: u8) {
-        self.bc.pair.r1 = val;
-    }
-    pub fn write_c(&mut self, val: u8) {
-        self.bc.pair.r2 = val;
-    }
-    pub fn write_d(&mut self, val: u8) {
-        self.de.pair.r1 = val;
-    }
-    pub fn write_e(&mut self, val: u8) {
-        self.de.pair.r2 = val;
-    }
-    pub fn write_h(&mut self, val: u8) {
-        self.hl.pair.r1 = val;
-    }
-    pub fn write_l(&mut self, val: u8) {
-        self.hl.pair.r2 = val;
-    }
-    pub fn write_af(&mut self, val: u16) {
-        self.af.combined = val;
-    }
-    pub fn write_bc(&mut self, val: u16) {
-        self.bc.combined = val;
-    }
-    pub fn write_de(&mut self, val: u16) {
-        self.de.combined = val;
-    }
-    pub fn write_hl(&mut self, val: u16) {
-        self.hl.combined = val;
-    }
-    pub fn write_sp(&mut self, val: u16) {
-        self.sp = val;
-    }
-    pub fn write_pc(&mut self, val: u16) {
-        self.pc = val;
-    }
-    pub fn fl(&self) -> &Flags {
-        &self.fl
-    }
-    pub fn fl_mut(&mut self) -> &mut Flags {
-        &mut self.fl
     }
 }
 
@@ -185,6 +139,9 @@ impl Default for Registers {
 }
 
 impl Flags {
+    pub fn new() -> Flags {
+        Flags { flags: 0 }
+    }
     pub fn get(&self) -> u8 {
         self.flags
     }
@@ -238,12 +195,8 @@ impl Flags {
     }
 }
 
-#[test]
-pub fn test_union() {
-    let mut regs = Registers::new();
-
-    regs.write_a(0xb);
-    assert_eq!(regs.a() as u16, regs.af());
-    regs.write_f(0xe);
-    assert_eq!(regs.af(), 0x0e0b); // endianess be like
+impl Default for Flags {
+    fn default() -> Self {
+        Self::new()
+    }
 }
