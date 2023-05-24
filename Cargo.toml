@@ -1,0 +1,16 @@
+[package]
+name = "gbair"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+egui = "0.21.0"
+egui-wgpu = "0.21.0"
+egui-winit = "0.21.1"
+env_logger = "0.10.0"
+log = "0.4.17"
+wgpu = "0.16.0"
+wgpu_app = { git = "https://github.com/Bash-09/wgpu_app", version = "0.1.0" }
+winit = "0.28.6"
