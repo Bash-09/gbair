@@ -51,6 +51,8 @@ Start Address
 Start Address
 */
 
+use std::ops::{Index, IndexMut};
+
 pub const ADDR_INT_VBLANK: u16 = 0x0040;
 pub const ADDR_INT_LCDC: u16 = 0x0048;
 pub const ADDR_INT_TIMER: u16 = 0x0050;
@@ -59,6 +61,14 @@ pub const ADDR_INT_HTL_P0_P13: u16 = 0x0060;
 
 pub struct Memory {
     map: [u8; 0xFFFF],
+}
+
+impl Index<u16> for Memory {
+    type Output = u8;
+
+    fn index(&self, index: u16) -> &Self::Output {
+        &self.map[index as usize]
+    }
 }
 
 impl Memory {
@@ -78,7 +88,7 @@ impl Memory {
         self.map[addr as usize] as u16 | ((self.map[addr as usize + 1] as u16) << 8)
     }
 
-    pub fn write(&mut self, addr: u16, data: u8) {
+    pub fn write_u8(&mut self, addr: u16, data: u8) {
         self.map[addr as usize] = data;
 
         // Write to echo as well
@@ -89,20 +99,19 @@ impl Memory {
         }
     }
 
-    // pub fn write_u16(&mut self, addr: u16, data: u16) {
-    //     self.map[addr as usize] = data as u8;
-    //     self.map[addr as usize + 1] = (data >> 8) as u8;
+    pub fn write_u16(&mut self, addr: u16, data: u16) {
+        self.map[addr as usize] = data as u8;
+        self.map[addr as usize + 1] = (data >> 8) as u8;
 
-    //     // Write to echo
-    //     if (0xE000..0xFE00).contains(&addr) {
-    //         self.map[addr as usize - 0x1000] = data as u8;
-    //         self.map[addr as usize + 1 - 0x1000] = (data >> 8) as u8;
-    //     } else if (0xC000..0xDE00).contains(&addr) {
-    //         self.map[addr as usize + 0x1000] = data as u8;
-    //         self.map[addr as usize + 1 + 0x1000] = (data >> 8) as u8;
-    //     }
-    //     todo!("Double check endianess");
-    // }
+        // Write to echo
+        if (0xE000..0xFE00).contains(&addr) {
+            self.map[addr as usize - 0x1000] = data as u8;
+            self.map[addr as usize + 1 - 0x1000] = (data >> 8) as u8;
+        } else if (0xC000..0xDE00).contains(&addr) {
+            self.map[addr as usize + 0x1000] = data as u8;
+            self.map[addr as usize + 1 + 0x1000] = (data >> 8) as u8;
+        }
+    }
 }
 
 impl Default for Memory {
