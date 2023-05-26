@@ -10,10 +10,10 @@ use crate::{
 };
 
 pub struct CPU {
-    regs: Registers,
-    flags: Flags,
+    pub regs: Registers,
+    pub flags: Flags,
     /// Using the 1MHz convention instead of the 4MHz physical clock that takes 4 cycles for everything
-    cycles: usize,
+    pub cycles: usize,
 }
 
 impl CPU {
@@ -936,7 +936,6 @@ impl CPU {
             // RETI
             0xD9 => {
                 self.POP(mem, PC);
-                self.regs[PC] -= 1;
                 self.cycles += 1;
                 todo!("RETI interrupt stuff");
             }
@@ -1068,7 +1067,9 @@ impl CPU {
             }
 
             // Unimpl
-            0xD3 | 0xDB | 0xDD | 0xE3 | 0xE4 | 0xEB | 0xEC | 0xED | 0xF4 | 0xFC | 0xFD => {}
+            0xD3 | 0xDB | 0xDD | 0xE3 | 0xE4 | 0xEB | 0xEC | 0xED | 0xF4 | 0xFC | 0xFD => {
+                log::error!("Undefined instruction: {:02X}", instr);
+            }
         }
     }
 

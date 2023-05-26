@@ -60,7 +60,7 @@ pub const ADDR_INT_SERIAL: u16 = 0x0058;
 pub const ADDR_INT_HTL_P0_P13: u16 = 0x0060;
 
 pub struct Memory {
-    map: [u8; 0xFFFF],
+    map: [u8; 0x10000],
 }
 
 impl Index<u16> for Memory {
@@ -73,7 +73,7 @@ impl Index<u16> for Memory {
 
 impl Memory {
     pub fn new() -> Memory {
-        Memory { map: [0; 0xFFFF] }
+        Memory { map: [0; 0x10000] }
     }
 
     pub fn get(&self) -> &[u8] {
@@ -111,6 +111,13 @@ impl Memory {
             self.map[addr as usize + 0x1000] = data as u8;
             self.map[addr as usize + 1 + 0x1000] = (data >> 8) as u8;
         }
+    }
+
+    pub fn write_bytes(&mut self, start_addr: u16, data: &[u8]) -> Option<()> {
+        for (i, d) in data.iter().enumerate() {
+            *self.map.get_mut(start_addr as usize + i)? = *d;
+        }
+        Some(())
     }
 }
 

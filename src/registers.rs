@@ -38,8 +38,8 @@ pub struct Flags {
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct RegisterPair {
-    r1: u8,
     r2: u8,
+    r1: u8,
 }
 
 #[repr(C)]
