@@ -28,13 +28,12 @@ impl CPU {
     /// Decodes and executes the next instruction regardless of current cycle counts or interrupt
     pub fn next_instruction(&mut self, mem: &mut Memory) {
         let instr: u8 = mem[self.regs[PC]];
+        self.regs[PC] += 1;
+        self.cycles += 1;
 
         match instr {
             // NOP
-            0x00 => {
-                self.regs[PC] += 1;
-                self.cycles += 1;
-            }
+            0x00 => {}
             // LD BC, d16
             0x01 => {
                 self.LD_RR(mem, BC);
@@ -62,8 +61,6 @@ impl CPU {
             // RLCA
             0x07 => {
                 self.regs[A] = self.regs[A].rotate_left(1);
-                self.cycles += 1;
-                self.regs[PC] += 1;
                 self.flags.set_z(false);
                 self.flags.set_n(false);
                 self.flags.set_h(false);
@@ -71,12 +68,8 @@ impl CPU {
             }
             // LD (a16), SP
             0x08 => {
-                let addr = mem.read_16(self.regs[PC] + 1);
-                mem.write_u8(addr, self.regs[SP] as u8);
-                mem.write_u8(addr + 1, (self.regs[SP] >> 8) as u8);
-
-                self.regs[PC] += 3;
-                self.cycles += 5;
+                let addr = self.IMM16(mem);
+                self.WRITE_16(mem, addr, self.regs[SP]);
             }
             // ADD HL, BC
             0x09 => {
@@ -109,9 +102,6 @@ impl CPU {
                 self.flags.set_h(false);
                 self.flags.set_c(self.regs[A] & 0b1 == 0b1);
                 self.regs[A] = self.regs[A].rotate_right(1);
-
-                self.regs[PC] += 1;
-                self.cycles += 1;
             }
             // STOP
             0x10 => {
@@ -152,15 +142,11 @@ impl CPU {
                 if carry {
                     self.regs[A] |= 1;
                 }
-                self.regs[PC] += 1;
-                self.cycles += 1;
             }
             // JR s8
             0x18 => {
-                // TODO - Do I need to add 2 to this as well?
-                self.regs[PC] =
-                    self.regs[PC].wrapping_add_signed((mem[self.regs[PC] + 1] as i8) as i16);
-                self.cycles += 3;
+                let offset = self.IMM8(mem) as i8 as i16;
+                self.JR(offset);
             }
             // ADD HL, DE
             0x19 => {
@@ -197,8 +183,6 @@ impl CPU {
                 if carry {
                     self.regs[A] |= 0x80;
                 }
-                self.regs[PC] += 1;
-                self.cycles += 1;
             }
             // JR NZ, s8
             0x20 => {
@@ -267,8 +251,6 @@ impl CPU {
                 self.flags.set_n(true);
                 self.flags.set_h(true);
                 self.regs[L] = !self.regs[L];
-                self.cycles += 1;
-                self.regs[PC] += 1;
             }
             // JR NC, s8
             0x30 => {
@@ -281,7 +263,7 @@ impl CPU {
             // LD (HL-), A
             0x32 => {
                 self.LD_MEM_RR_R(mem, HL, A);
-                self.regs[HL] -= 1;
+                self.regs[HL] = self.regs[HL].wrapping_sub(1);
             }
             // INC SP
             0x33 => {
@@ -297,15 +279,13 @@ impl CPU {
             }
             // LD (HL) d8
             0x36 => {
-                self.LD_MEM_RR_D(mem, HL);
+                self.LD_MEM_RR(mem, HL);
             }
             // SCF
             0x37 => {
                 self.flags.set_n(false);
                 self.flags.set_h(false);
                 self.flags.set_c(true);
-                self.regs[PC] += 1;
-                self.cycles += 1;
             }
             // JR C, s8
             0x38 => {
@@ -318,7 +298,7 @@ impl CPU {
             // LD A, (HL-)
             0x3A => {
                 self.LD_R_MEM_RR(mem, A, HL);
-                self.regs[HL] -= 1;
+                self.regs[HL] = self.regs[HL].wrapping_sub(1);
             }
             // DEC SP
             0x3B => {
@@ -341,8 +321,6 @@ impl CPU {
                 self.flags.set_n(false);
                 self.flags.set_h(false);
                 self.flags.set_c(!self.flags.c());
-                self.regs[PC] += 1;
-                self.cycles += 1;
             }
             // LD B, B
             0x40 => {
@@ -882,16 +860,8 @@ impl CPU {
             }
             // ADD A, d8
             0xC6 => {
-                let rhs = mem[self.regs[PC] + 1];
-                self.flags.set_h(Self::half_carry_add_u8(self.regs[A], rhs));
-                self.flags.set_n(false);
-
-                let original = self.regs[A];
-                self.regs[A] = self.regs[A].wrapping_add(rhs);
-                self.flags.set_z(self.regs[A] == 0);
-                self.flags.set_c(self.regs[A] < original);
-                self.regs[PC] += 2;
-                self.cycles += 2;
+                let rhs = self.IMM8(mem);
+                self.regs[A] = self.ADD(self.regs[A], rhs);
             }
             // RST 0
             0xC7 => {
@@ -923,22 +893,8 @@ impl CPU {
             }
             // ADC A, d8
             0xCE => {
-                let rhs = mem[self.regs[PC] + 1];
-                let c = if self.flags.c() { 1 } else { 0 };
-                let h = ((self.regs[A] & 0x0F)
-                    .wrapping_add(rhs & 0x0F)
-                    .wrapping_add(c))
-                    & 0x10
-                    == 0x10;
-                self.flags.set_h(h);
-                self.flags.set_n(false);
-
-                let original = self.regs[A];
-                self.regs[A] = self.regs[A].wrapping_add(rhs).wrapping_add(c);
-                self.flags.set_z(self.regs[A] == 0);
-                self.flags.set_c(self.regs[A] < original);
-                self.regs[PC] += 2;
-                self.cycles += 2;
+                let rhs = self.IMM8(mem);
+                self.regs[A] = self.ADC(self.regs[A], rhs);
             }
             // RST 1
             0xCF => {
@@ -966,16 +922,8 @@ impl CPU {
             }
             // SUB d8
             0xD6 => {
-                let rhs = mem[self.regs[PC] + 1];
-                self.flags.set_h(Self::half_carry_sub_u8(self.regs[A], rhs));
-                self.flags.set_n(true);
-
-                let original = self.regs[A];
-                self.regs[A] = self.regs[A].wrapping_sub(rhs);
-                self.flags.set_z(self.regs[A] == 0);
-                self.flags.set_c(self.regs[A] > original);
-                self.regs[PC] += 1;
-                self.cycles += 1;
+                let rhs = self.IMM8(mem);
+                self.regs[A] = self.SUB(self.regs[A], rhs);
             }
             // RST 2
             0xD7 => {
@@ -1002,22 +950,8 @@ impl CPU {
             }
             // SBC A, d8
             0xDE => {
-                let rhs = mem[self.regs[PC] + 1];
-                let c = if self.flags.c() { 1 } else { 0 };
-                let h = ((self.regs[A] & 0x0F)
-                    .wrapping_sub(rhs & 0x0F)
-                    .wrapping_sub(c))
-                    & 0x10
-                    == 0x10;
-                self.flags.set_h(h);
-                self.flags.set_n(false);
-
-                let original = self.regs[A];
-                self.regs[A] = self.regs[A].wrapping_sub(rhs).wrapping_sub(c);
-                self.flags.set_z(self.regs[A] == 0);
-                self.flags.set_c(self.regs[A] > original);
-                self.regs[PC] += 2;
-                self.cycles += 2;
+                let rhs = self.IMM8(mem);
+                self.regs[A] = self.SBC(self.regs[A], rhs);
             }
             // RST 3
             0xDF => {
@@ -1025,9 +959,8 @@ impl CPU {
             }
             // LD (a8), A
             0xE0 => {
-                mem.write_u8(0xFF00 + mem[self.regs[PC] + 1] as u16, self.regs[A]);
-                self.regs[PC] += 2;
-                self.cycles += 3;
+                let offset = self.IMM8(mem) as u16;
+                mem.write_u8(0xFF00 + offset, self.regs[A]);
             }
             // POP HL
             0xE1 => {
@@ -1035,10 +968,7 @@ impl CPU {
             }
             // LD (C), A
             0xE2 => {
-                mem.write_u8(0xFF00 + self.regs[C] as u16, self.regs[A]);
-
-                self.regs[PC] += 1;
-                self.cycles += 2;
+                self.WRITE_8(mem, 0xFF00 + self.regs[C] as u16, self.regs[A]);
             }
             // PUSH HL
             0xE5 => {
@@ -1046,14 +976,8 @@ impl CPU {
             }
             // AND d8
             0xE6 => {
-                let rhs = mem[self.regs[PC] + 1];
-                self.regs[A] &= rhs;
-                self.flags.set_z(self.regs[A] == 0);
-                self.flags.set_n(false);
-                self.flags.set_h(true);
-                self.flags.set_c(false);
-                self.regs[PC] += 2;
-                self.cycles += 2;
+                let rhs = self.IMM8(mem);
+                self.regs[A] = self.AND(self.regs[A], rhs);
             }
             // RST 4
             0xE7 => {
@@ -1061,45 +985,23 @@ impl CPU {
             }
             // ADD SP, s8
             0xE8 => {
-                let rhs = mem[self.regs[PC] + 1] as i8 as i16;
-                if rhs > 0 {
-                    self.flags
-                        .set_h(Self::half_carry_add_u16(self.regs[SP], rhs as u16));
-                } else {
-                    self.flags
-                        .set_h(Self::half_carry_sub_u16(self.regs[SP], (-rhs) as u16));
-                }
-
-                let original = self.regs[SP];
-                self.regs[SP] = self.regs[SP].wrapping_add_signed(rhs);
-                self.flags.set_z(false);
-                self.flags.set_n(false);
-                self.flags.set_c(self.regs[SP] < original);
-                self.regs[PC] += 2;
-                self.cycles += 4;
+                let rhs = self.IMM8(mem) as i8 as i16 as u16;
+                self.regs[SP] = self.ADD_WIDE(self.regs[SP], rhs);
             }
             // JP HL
             0xE9 => {
                 self.regs[PC] = self.regs[HL];
-                self.cycles += 1;
             }
             // LD (a16), A
             0xEA => {
-                mem.write_u8(mem.read_16(self.regs[PC] + 1), self.regs[A]);
-
-                self.regs[PC] += 3;
-                self.cycles += 4;
+                let addr = self.IMM16(mem);
+                self.WRITE_8(mem, addr, self.regs[A]);
+                self.cycles += 1;
             }
             // XOR d8
             0xEE => {
-                let rhs = mem[self.regs[PC] + 1];
-                self.regs[A] ^= rhs;
-                self.flags.set_z(self.regs[A] == 0);
-                self.flags.set_n(false);
-                self.flags.set_h(false);
-                self.flags.set_c(false);
-                self.regs[PC] += 2;
-                self.cycles += 2;
+                let data = self.IMM8(mem);
+                self.regs[A] = self.XOR(self.regs[A], data);
             }
             // RST 5
             0xEF => {
@@ -1107,9 +1009,8 @@ impl CPU {
             }
             // LD A, (a8)
             0xF0 => {
-                self.regs[A] = mem[self.regs[PC] + 1];
-                self.regs[PC] += 2;
-                self.cycles += 3;
+                self.regs[A] = self.IMM8(mem);
+                self.cycles += 1;
             }
             // POP AF
             0xF1 => {
@@ -1118,8 +1019,7 @@ impl CPU {
             // LD A, (C)
             0xF2 => {
                 self.regs[A] = mem[0xFF00 + self.regs[C] as u16];
-                self.regs[PC] += 1;
-                self.cycles += 2;
+                self.cycles += 1;
             }
             // DI
             0xF3 => {
@@ -1131,14 +1031,8 @@ impl CPU {
             }
             // OR d8
             0xF6 => {
-                let rhs = mem[self.regs[PC] + 1];
-                self.regs[A] |= rhs;
-                self.flags.set_z(self.regs[A] == 0);
-                self.flags.set_n(false);
-                self.flags.set_h(false);
-                self.flags.set_c(false);
-                self.regs[PC] += 1;
-                self.cycles += 1;
+                let rhs = self.IMM8(mem);
+                self.regs[A] = self.OR(self.regs[A], rhs);
             }
             // RST 6
             0xF7 => {
@@ -1146,34 +1040,18 @@ impl CPU {
             }
             // LD HL, SP+s8
             0xF8 => {
-                let rhs = mem[self.regs[PC] + 1] as i8 as i16;
-                if rhs > 0 {
-                    self.flags
-                        .set_h(Self::half_carry_add_u16(self.regs[SP], rhs as u16));
-                } else {
-                    self.flags
-                        .set_h(Self::half_carry_sub_u16(self.regs[SP], (-rhs) as u16));
-                }
-
-                let original = self.regs[SP];
-                self.regs[HL] = self.regs[SP].wrapping_add_signed(rhs);
-                self.flags.set_z(false);
-                self.flags.set_n(false);
-                self.flags.set_c(self.regs[SP] < original);
-                self.regs[PC] += 2;
-                self.cycles += 3;
+                let data = self.IMM8(mem) as i8 as i16 as u16;
+                self.regs[HL] = self.ADD_WIDE(self.regs[HL], data);
             }
             // LD SP, HL
             0xF9 => {
                 self.regs[SP] = self.regs[HL];
-                self.regs[PC] += 1;
-                self.cycles += 2;
+                self.cycles += 1;
             }
             // LD A, (a16)
             0xFA => {
-                self.regs[A] = mem[mem.read_16(self.regs[PC] + 1)];
-                self.regs[PC] += 3;
-                self.cycles += 4;
+                let addr = self.IMM16(mem);
+                self.regs[A] = self.READ_8(mem, addr);
             }
             // EI
             0xFB => {
@@ -1181,14 +1059,8 @@ impl CPU {
             }
             // CP d8
             0xFE => {
-                let rhs = mem[self.regs[PC] + 1];
-                self.flags.set_z(self.regs[A].wrapping_sub(rhs) == 0);
-                self.flags.set_n(true);
-                self.flags.set_h(Self::half_carry_sub_u8(self.regs[A], rhs));
-                self.flags.set_c(self.regs[A].checked_sub(rhs).is_none());
-
-                self.regs[PC] += 1;
-                self.cycles += 1;
+                let data = self.IMM8(mem);
+                self.CP(self.regs[A], data);
             }
             // RST 7
             0xFF => {
@@ -1200,6 +1072,38 @@ impl CPU {
         }
     }
 
+    fn READ_8(&mut self, mem: &Memory, addr: u16) -> u8 {
+        self.cycles += 1;
+        mem.read_8(addr)
+    }
+
+    fn READ_16(&mut self, mem: &Memory, addr: u16) -> u16 {
+        self.cycles += 2;
+        mem.read_16(addr)
+    }
+
+    fn WRITE_8(&mut self, mem: &mut Memory, addr: u16, data: u8) {
+        self.cycles += 1;
+        mem.write_u8(addr, data);
+    }
+
+    fn WRITE_16(&mut self, mem: &mut Memory, addr: u16, data: u16) {
+        self.cycles += 2;
+        mem.write_u16(addr, data);
+    }
+
+    fn IMM8(&mut self, mem: &Memory) -> u8 {
+        let out = self.READ_8(mem, self.regs[PC]);
+        self.regs[PC] += 1;
+        out
+    }
+
+    fn IMM16(&mut self, mem: &Memory) -> u16 {
+        let out = self.READ_16(mem, self.regs[PC]);
+        self.regs[PC] += 2;
+        out
+    }
+
     fn RST(&mut self, mem: &mut Memory, n: u16) {
         self.PUSH(mem, PC);
         self.regs[PC] = n * 8;
@@ -1207,381 +1111,297 @@ impl CPU {
 
     fn RET_C(&mut self, mem: &Memory, cond: bool) {
         if cond {
-            self.regs[PC] = mem.read_16(self.regs[SP]);
-            self.regs[SP] += 2;
-            self.cycles += 5;
-        } else {
-            self.regs[PC] += 1;
-            self.cycles += 2;
+            self.RET(mem);
         }
+        self.cycles += 1;
     }
 
     fn RET(&mut self, mem: &Memory) {
-        self.regs[PC] = mem.read_16(self.regs[SP]);
+        self.regs[PC] = self.READ_16(mem, self.regs[SP]);
         self.regs[SP] += 2;
-        self.cycles += 4;
     }
 
     fn POP(&mut self, mem: &Memory, reg: REG_WIDE) {
-        self.regs[reg] = mem.read_16(self.regs[SP]);
+        self.regs[reg] = self.READ_16(mem, self.regs[SP]);
         self.regs[SP] += 2;
-        self.cycles += 3;
-        self.regs[PC] += 1;
     }
 
     fn PUSH(&mut self, mem: &mut Memory, reg: REG_WIDE) {
         self.regs[SP] -= 2;
-        mem.write_u16(self.regs[SP], self.regs[reg]);
-        self.cycles += 4;
-        self.regs[PC] += 1;
+        self.WRITE_16(mem, self.regs[SP], self.regs[reg]);
+        self.cycles += 1;
+    }
+
+    fn JR(&mut self, offset: i16) {
+        self.regs[PC] = self.regs[PC].wrapping_add_signed(offset);
+        self.cycles += 1;
     }
 
     fn JP_C_AA(&mut self, mem: &Memory, jump: bool) {
+        let target = self.IMM16(mem);
         if jump {
-            self.regs[PC] = mem.read_16(self.regs[PC] + 1);
-            self.cycles += 4;
-        } else {
-            self.regs[PC] += 3;
-            self.cycles += 3;
+            self.regs[PC] = target;
+            self.cycles += 1;
         }
     }
 
     fn CALL_C(&mut self, mem: &mut Memory, call: bool) {
+        let addr = self.IMM16(mem);
         if call {
-            let addr = mem.read_16(self.regs[PC] + 1);
-            self.regs[PC] += 3;
             self.PUSH(mem, PC);
-
             self.regs[PC] = addr;
-            self.cycles += 2;
-        } else {
-            self.regs[PC] += 3;
-            self.cycles += 3;
         }
     }
 
     fn JR_C(&mut self, mem: &mut Memory, jump: bool) {
+        let addr = self.IMM8(mem) as i8 as i16;
         if jump {
-            self.regs[PC] =
-                self.regs[PC].wrapping_add_signed((mem[self.regs[PC] + 1] as i8) as i16);
-            self.cycles += 3;
-        } else {
-            self.regs[PC] += 2;
-            self.cycles += 2;
+            self.JR(addr);
         }
+        self.cycles += 1;
+    }
+
+    fn ADD(&mut self, lhs: u8, rhs: u8) -> u8 {
+        self.flags.set_h(Self::half_carry_add_u8(lhs, rhs));
+        self.flags.set_n(false);
+        self.flags.set_c(lhs.checked_add(rhs).is_none());
+        self.flags.set_z(lhs.wrapping_add(rhs) == 0);
+        lhs.wrapping_add(rhs)
+    }
+
+    fn ADD_WIDE(&mut self, lhs: u16, rhs: u16) -> u16 {
+        self.flags.set_h(Self::half_carry_add_u16(lhs, rhs));
+        self.flags.set_n(false);
+        self.flags.set_c(lhs.checked_add(rhs).is_none());
+        self.flags.set_z(lhs.wrapping_add(rhs) == 0);
+        self.cycles += 2;
+        lhs.wrapping_add(rhs)
+    }
+
+    fn SUB(&mut self, lhs: u8, rhs: u8) -> u8 {
+        self.flags.set_z(lhs.wrapping_sub(rhs) == 0);
+        self.flags.set_n(true);
+        self.flags.set_h(Self::half_carry_sub_u8(lhs, rhs));
+        self.flags.set_c(lhs.checked_sub(rhs).is_none());
+        lhs.wrapping_sub(rhs)
     }
 
     fn ADD_RR_RR(&mut self, r1: REG_WIDE, r2: REG_WIDE) {
-        self.flags
-            .set_h(Self::half_carry_add_u16(self.regs[r1], self.regs[r2]));
-        self.flags.set_n(false);
-
-        self.regs[r1] = self.regs[r1].wrapping_add(self.regs[r2]);
-        self.flags.set_z(self.regs[r1] == 0);
-
-        self.cycles += 2;
-        self.regs[PC] += 1;
+        self.regs[r1] = self.ADD_WIDE(self.regs[r1], self.regs[r2]);
     }
 
     fn ADD_R_R(&mut self, r1: REG, r2: REG) {
-        self.flags
-            .set_h(Self::half_carry_add_u8(self.regs[r1], self.regs[r2]));
-        self.flags.set_n(false);
-
-        let original = self.regs[r1];
-        self.regs[r1] = self.regs[r1].wrapping_add(self.regs[r2]);
-        self.flags.set_z(self.regs[r1] == 0);
-        self.flags.set_c(self.regs[r1] < original);
-        self.regs[PC] += 1;
-        self.cycles += 1;
+        self.regs[r1] = self.ADD(self.regs[r1], self.regs[r2]);
     }
 
     fn ADD_R_MEM_RR(&mut self, mem: &Memory, r1: REG, addr: REG_WIDE) {
-        let rhs = mem[self.regs[addr]];
-        self.flags
-            .set_h(Self::half_carry_add_u8(self.regs[r1], rhs));
-        self.flags.set_n(false);
+        let rhs = self.READ_8(mem, self.regs[addr]);
+        self.regs[r1] = self.ADD(self.regs[r1], rhs);
+    }
 
-        let original = self.regs[r1];
-        self.regs[r1] = self.regs[r1].wrapping_add(rhs);
-        self.flags.set_z(self.regs[r1] == 0);
-        self.flags.set_c(self.regs[r1] < original);
-        self.regs[PC] += 1;
-        self.cycles += 2;
+    fn ADC(&mut self, lhs: u8, rhs: u8) -> u8 {
+        let c = if self.flags.c() { 1 } else { 0 };
+        let h = (lhs & 0x0F).wrapping_add(rhs & 0x0F).wrapping_add(c) & 0x10 == 0x10;
+        let ans = lhs.wrapping_add(rhs).wrapping_add(c);
+        self.flags.set_z(ans == 0);
+        self.flags.set_n(false);
+        self.flags.set_h(h);
+        self.flags.set_c(ans < lhs);
+        ans
     }
 
     fn ADC_R_R(&mut self, r1: REG, r2: REG) {
-        let c = if self.flags.c() { 1 } else { 0 };
-        let h = ((self.regs[r1] & 0x0F)
-            .wrapping_add(self.regs[r2] & 0x0F)
-            .wrapping_add(c))
-            & 0x10
-            == 0x10;
-        self.flags.set_h(h);
-        self.flags.set_n(false);
-
-        let original = self.regs[r1];
-        self.regs[r1] = self.regs[r1].wrapping_add(self.regs[r2]).wrapping_add(c);
-        self.flags.set_z(self.regs[r1] == 0);
-        self.flags.set_c(self.regs[r1] < original);
-        self.regs[PC] += 1;
-        self.cycles += 1;
+        self.regs[r1] = self.ADC(self.regs[r1], self.regs[r2]);
     }
 
     fn ADC_R_MEM_RR(&mut self, mem: &Memory, r1: REG, addr: REG_WIDE) {
-        let rhs = mem[self.regs[addr]];
-        let c = if self.flags.c() { 1 } else { 0 };
-        let h = ((self.regs[r1] & 0x0F)
-            .wrapping_add(rhs & 0x0F)
-            .wrapping_add(c))
-            & 0x10
-            == 0x10;
-        self.flags.set_h(h);
-        self.flags.set_n(false);
-
-        let original = self.regs[r1];
-        self.regs[r1] = self.regs[r1].wrapping_add(rhs).wrapping_add(c);
-        self.flags.set_z(self.regs[r1] == 0);
-        self.flags.set_c(self.regs[r1] < original);
-        self.regs[PC] += 1;
-        self.cycles += 2;
+        let rhs = self.READ_8(mem, self.regs[addr]);
+        self.regs[r1] = self.ADC(self.regs[r1], rhs);
     }
 
     fn SUB_R_R(&mut self, r1: REG, r2: REG) {
-        self.flags
-            .set_h(Self::half_carry_sub_u8(self.regs[r1], self.regs[r2]));
-        self.flags.set_n(true);
-
-        let original = self.regs[r1];
-        self.regs[r1] = self.regs[r1].wrapping_sub(self.regs[r2]);
-        self.flags.set_z(self.regs[r1] == 0);
-        self.flags.set_c(self.regs[r1] > original);
-        self.regs[PC] += 1;
-        self.cycles += 1;
+        self.regs[r1] = self.SUB(self.regs[r1], self.regs[r2]);
     }
 
     fn SUB_R_MEM_RR(&mut self, mem: &Memory, r1: REG, addr: REG_WIDE) {
-        let rhs = mem[self.regs[addr]];
-        self.flags
-            .set_h(Self::half_carry_sub_u8(self.regs[r1], rhs));
-        self.flags.set_n(true);
+        let rhs = self.READ_8(mem, self.regs[addr]);
+        self.regs[r1] = self.SUB(self.regs[r1], rhs);
+    }
 
-        let original = self.regs[r1];
-        self.regs[r1] = self.regs[r1].wrapping_sub(rhs);
-        self.flags.set_z(self.regs[r1] == 0);
-        self.flags.set_c(self.regs[r1] > original);
-        self.regs[PC] += 1;
-        self.cycles += 2;
+    fn SBC(&mut self, lhs: u8, rhs: u8) -> u8 {
+        let c = if self.flags.c() { 1 } else { 0 };
+        let h = (lhs & 0x0F).wrapping_sub(rhs & 0x0F).wrapping_sub(c) & 0x10 == 0x10;
+        let ans = lhs.wrapping_sub(rhs).wrapping_sub(c);
+        self.flags.set_z(ans == 0);
+        self.flags.set_n(true);
+        self.flags.set_h(h);
+        self.flags.set_c(ans > lhs);
+        ans
     }
 
     fn SBC_R_R(&mut self, r1: REG, r2: REG) {
-        let c = if self.flags.c() { 1 } else { 0 };
-        let h = ((self.regs[r1] & 0x0F)
-            .wrapping_sub(self.regs[r2] & 0x0F)
-            .wrapping_sub(c))
-            & 0x10
-            == 0x10;
-        self.flags.set_h(h);
-        self.flags.set_n(false);
-
-        let original = self.regs[r1];
-        self.regs[r1] = self.regs[r1].wrapping_sub(self.regs[r2]).wrapping_sub(c);
-        self.flags.set_z(self.regs[r1] == 0);
-        self.flags.set_c(self.regs[r1] > original);
-        self.regs[PC] += 1;
-        self.cycles += 1;
+        self.regs[r1] = self.SBC(self.regs[r1], self.regs[r2]);
     }
 
     fn SBC_R_MEM_RR(&mut self, mem: &Memory, r1: REG, addr: REG_WIDE) {
-        let rhs = mem[self.regs[addr]];
-        let c = if self.flags.c() { 1 } else { 0 };
-        let h = ((self.regs[r1] & 0x0F)
-            .wrapping_sub(rhs & 0x0F)
-            .wrapping_sub(c))
-            & 0x10
-            == 0x10;
-        self.flags.set_h(h);
-        self.flags.set_n(false);
-
-        let original = self.regs[r1];
-        self.regs[r1] = self.regs[r1].wrapping_sub(rhs).wrapping_sub(c);
-        self.flags.set_z(self.regs[r1] == 0);
-        self.flags.set_c(self.regs[r1] > original);
-        self.regs[PC] += 1;
-        self.cycles += 2;
+        let rhs = self.READ_8(mem, self.regs[addr]);
+        self.regs[r1] = self.SBC(self.regs[r1], rhs);
     }
 
-    fn AND_R_R(&mut self, dst: REG, src: REG) {
-        self.regs[dst] &= self.regs[src];
-        self.flags.set_z(self.regs[dst] == 0);
+    fn AND(&mut self, lhs: u8, rhs: u8) -> u8 {
+        let ans = lhs & rhs;
+        self.flags.set_z(ans == 0);
         self.flags.set_n(false);
         self.flags.set_h(true);
         self.flags.set_c(false);
-        self.regs[PC] += 1;
-        self.cycles += 1;
+        ans
+    }
+
+    fn AND_R_R(&mut self, r1: REG, r2: REG) {
+        self.regs[r1] = self.AND(self.regs[r1], self.regs[r2]);
     }
 
     fn AND_R_MEM_RR(&mut self, mem: &mut Memory, dst: REG, addr: REG_WIDE) {
-        self.regs[dst] &= mem[self.regs[addr]];
-        self.flags.set_z(self.regs[dst] == 0);
+        let rhs = self.READ_8(mem, self.regs[addr]);
+        self.regs[dst] = self.AND(self.regs[dst], rhs);
+    }
+
+    fn XOR(&mut self, lhs: u8, rhs: u8) -> u8 {
+        let ans = lhs ^ rhs;
+        self.flags.set_z(ans == 0);
         self.flags.set_n(false);
-        self.flags.set_h(true);
+        self.flags.set_h(false);
         self.flags.set_c(false);
-        self.regs[PC] += 1;
-        self.cycles += 2;
+        ans
     }
 
     fn XOR_R_R(&mut self, dst: REG, src: REG) {
-        self.regs[dst] ^= self.regs[src];
-        self.flags.set_z(self.regs[dst] == 0);
-        self.flags.set_n(false);
-        self.flags.set_h(false);
-        self.flags.set_c(false);
-        self.regs[PC] += 1;
-        self.cycles += 1;
+        self.regs[dst] = self.XOR(self.regs[dst], self.regs[src]);
     }
 
     fn XOR_R_MEM_RR(&mut self, mem: &mut Memory, dst: REG, addr: REG_WIDE) {
-        self.regs[dst] ^= mem[self.regs[addr]];
-        self.flags.set_z(self.regs[dst] == 0);
+        let rhs = self.READ_8(mem, self.regs[addr]);
+        self.regs[dst] = self.XOR(self.regs[dst], rhs);
+    }
+
+    fn OR(&mut self, lhs: u8, rhs: u8) -> u8 {
+        let ans = lhs | rhs;
+        self.flags.set_z(ans == 0);
         self.flags.set_n(false);
         self.flags.set_h(false);
         self.flags.set_c(false);
-        self.regs[PC] += 1;
-        self.cycles += 2;
+        ans
     }
 
     fn OR_R_R(&mut self, dst: REG, src: REG) {
-        self.regs[dst] |= self.regs[src];
-        self.flags.set_z(self.regs[dst] == 0);
-        self.flags.set_n(false);
-        self.flags.set_h(false);
-        self.flags.set_c(false);
-        self.regs[PC] += 1;
-        self.cycles += 1;
+        self.regs[dst] = self.OR(self.regs[dst], self.regs[src]);
     }
 
     fn OR_R_MEM_RR(&mut self, mem: &mut Memory, dst: REG, addr: REG_WIDE) {
-        self.regs[dst] |= mem[self.regs[addr]];
-        self.flags.set_z(self.regs[dst] == 0);
-        self.flags.set_n(false);
-        self.flags.set_h(false);
-        self.flags.set_c(false);
-        self.regs[PC] += 1;
-        self.cycles += 2;
+        let rhs = self.READ_8(mem, self.regs[addr]);
+        self.regs[dst] = self.OR(self.regs[dst], rhs);
+    }
+
+    fn CP(&mut self, lhs: u8, rhs: u8) {
+        self.flags.set_z(lhs.wrapping_sub(rhs) == 0);
+        self.flags.set_n(true);
+        self.flags.set_h(Self::half_carry_sub_u8(lhs, rhs));
+        self.flags.set_c(lhs.checked_sub(rhs).is_none());
     }
 
     fn CP_R_R(&mut self, lhs: REG, rhs: REG) {
-        self.flags
-            .set_z(self.regs[lhs].wrapping_sub(self.regs[rhs]) == 0);
-        self.flags.set_n(true);
-        self.flags
-            .set_h(Self::half_carry_sub_u8(self.regs[lhs], self.regs[rhs]));
-        self.flags
-            .set_c(self.regs[lhs].checked_sub(self.regs[rhs]).is_none());
-
-        self.regs[PC] += 1;
-        self.cycles += 1;
+        self.CP(self.regs[lhs], self.regs[rhs]);
     }
 
     fn CP_R_MEM_RR(&mut self, mem: &Memory, lhs: REG, addr: REG_WIDE) {
-        let rhs = mem[self.regs[addr]];
-        self.flags.set_z(self.regs[lhs].wrapping_sub(rhs) == 0);
-        self.flags.set_n(true);
-        self.flags
-            .set_h(Self::half_carry_sub_u8(self.regs[lhs], rhs));
-        self.flags.set_c(self.regs[lhs].checked_sub(rhs).is_none());
+        let rhs = self.READ_8(mem, self.regs[addr]);
+        self.CP(self.regs[lhs], rhs);
+    }
 
-        self.regs[PC] += 1;
+    fn INC(&mut self, lhs: u8) -> u8 {
+        let ans = lhs.wrapping_add(1);
+        self.flags.set_z(ans == 0);
+        self.flags.set_n(false);
+        self.flags.set_h(Self::half_carry_add_u8(lhs, 1));
+        ans
+    }
+
+    fn DEC(&mut self, lhs: u8) -> u8 {
+        let ans = lhs.wrapping_sub(1);
+        self.flags.set_z(ans == 0);
+        self.flags.set_n(false);
+        self.flags.set_h(Self::half_carry_sub_u8(lhs, 1));
+        ans
+    }
+
+    fn INC_WIDE(&mut self, lhs: u16) -> u16 {
+        let ans = lhs.wrapping_add(1);
+        self.flags.set_z(ans == 0);
+        self.flags.set_n(false);
+        self.flags.set_h(Self::half_carry_add_u16(lhs, 1));
         self.cycles += 2;
+        ans
+    }
+
+    fn DEC_WIDE(&mut self, lhs: u16) -> u16 {
+        let ans = lhs.wrapping_sub(1);
+        self.flags.set_z(ans == 0);
+        self.flags.set_n(false);
+        self.flags.set_h(Self::half_carry_sub_u16(lhs, 1));
+        self.cycles += 2;
+        ans
     }
 
     fn DEC_R(&mut self, reg: REG) {
-        self.flags
-            .set_h((self.regs[reg] & 0xf).wrapping_sub(1) & 0x10 != 0);
-        self.regs[reg] = self.regs[reg].wrapping_sub(1);
-        self.flags.set_z(self.regs[reg] == 0);
-        self.flags.set_n(true);
-        self.regs[PC] += 1;
-        self.cycles += 1;
+        self.regs[reg] = self.DEC(self.regs[reg]);
     }
 
     fn INC_R(&mut self, reg: REG) {
-        self.flags
-            .set_h((self.regs[reg] & 0xf).wrapping_add(1) & 0x10 != 0);
-        self.regs[reg] = self.regs[reg].wrapping_add(1);
-        self.flags.set_z(self.regs[reg] == 0);
-        self.flags.set_n(false);
-        self.regs[PC] += 1;
-        self.cycles += 1;
+        self.regs[reg] = self.INC(self.regs[reg]);
     }
 
     fn DEC_RR(&mut self, reg: REG_WIDE) {
-        self.regs[reg] = self.regs[reg].wrapping_sub(1);
-        self.regs[PC] += 1;
-        self.cycles += 2;
+        self.regs[reg] = self.DEC_WIDE(self.regs[reg]);
     }
 
     fn INC_RR(&mut self, reg: REG_WIDE) {
-        self.regs[reg] = self.regs[reg].wrapping_add(1);
-        self.regs[PC] += 1;
-        self.cycles += 2;
+        self.regs[reg] = self.INC_WIDE(self.regs[reg]);
     }
 
     fn INC_MEM_RR(&mut self, mem: &mut Memory, addr: REG_WIDE) {
-        let addr = self.regs[addr];
-        self.flags.set_h(Self::half_carry_add_u8(mem[addr], 1));
-        mem.write_u8(addr, mem[addr].wrapping_add(1));
-        self.flags.set_n(false);
-        self.flags.set_z(mem[addr] == 0);
-        self.regs[PC] += 1;
-        self.cycles += 3;
+        let rhs = self.READ_8(mem, self.regs[addr]);
+        let data = self.INC(rhs);
+        self.WRITE_8(mem, self.regs[addr], data);
     }
 
     fn DEC_MEM_RR(&mut self, mem: &mut Memory, addr: REG_WIDE) {
-        let addr = self.regs[addr];
-        self.flags.set_h(Self::half_carry_sub_u8(mem[addr], 1));
-        mem.write_u8(addr, mem[addr].wrapping_sub(1));
-        self.flags.set_n(true);
-        self.flags.set_z(mem[addr] == 0);
-        self.regs[PC] += 1;
-        self.cycles += 3;
+        let rhs = self.READ_8(mem, self.regs[addr]);
+        let data = self.DEC(rhs);
+        self.WRITE_8(mem, self.regs[addr], data);
     }
 
     fn LD_RR(&mut self, mem: &Memory, dst: REG_WIDE) {
-        self.regs[dst] = mem.read_16(self.regs[PC] + 1);
-        self.regs[PC] += 3;
-        self.cycles += 3;
+        self.regs[dst] = self.IMM16(mem);
     }
 
     fn LD_R(&mut self, mem: &Memory, dst: REG) {
-        self.regs[dst] = mem[self.regs[PC] + 1];
-        self.regs[PC] += 2;
-        self.cycles += 2;
+        self.regs[dst] = self.IMM8(mem);
     }
 
     fn LD_MEM_RR_R(&mut self, mem: &mut Memory, addr: REG_WIDE, data: REG) {
-        mem.write_u8(self.regs[addr], self.regs[data]);
-        self.regs[PC] += 1;
-        self.cycles += 2;
+        self.WRITE_8(mem, self.regs[addr], self.regs[data]);
     }
 
     fn LD_R_MEM_RR(&mut self, mem: &mut Memory, dst: REG, addr: REG_WIDE) {
-        self.regs[dst] = mem[self.regs[addr]];
-
-        self.cycles += 2;
-        self.regs[PC] += 1;
+        self.regs[dst] = self.READ_8(mem, self.regs[addr]);
     }
-    fn LD_MEM_RR_D(&mut self, mem: &mut Memory, addr: REG_WIDE) {
-        mem.write_u8(self.regs[addr], mem[self.regs[PC] + 1]);
-        self.regs[PC] += 2;
-        self.cycles += 3;
+    fn LD_MEM_RR(&mut self, mem: &mut Memory, addr: REG_WIDE) {
+        let data = self.IMM8(mem);
+        self.WRITE_8(mem, self.regs[addr], data);
     }
 
     fn LD_R_R(&mut self, dst: REG, src: REG) {
         self.regs[dst] = self.regs[src];
-        self.cycles += 1;
-        self.regs[PC] += 1;
     }
 
     fn half_carry_add_u16(a: u16, b: u16) -> bool {
