@@ -1,7 +1,7 @@
 #![allow(non_snake_case)]
 
 use crate::{
-    mem::Memory,
+    mem::{self, Memory},
     registers::{
         Flags, Registers,
         REG::{self, *},
@@ -14,6 +14,8 @@ pub struct CPU {
     pub flags: Flags,
     /// Using the 1MHz convention instead of the 4MHz physical clock that takes 4 cycles for everything
     pub cycles: usize,
+    pub interrupt_master_enable: bool,
+    pub interrupt_enable_scheduled: bool,
 }
 
 impl CPU {
@@ -22,6 +24,60 @@ impl CPU {
             regs: Registers::new(),
             flags: Flags::new(),
             cycles: 0,
+            interrupt_master_enable: false,
+            interrupt_enable_scheduled: false,
+        }
+    }
+
+    pub fn next_cycle(&mut self, mem: &mut Memory) {
+        self.cycles = self.cycles.saturating_sub(1);
+
+        if self.cycles == 0 {
+            self.handle_interrupts(mem);
+        }
+
+        if self.cycles == 0 {
+            self.next_instruction(mem);
+        }
+    }
+
+    /// Checks any pending interrupts and branches to them
+    pub fn handle_interrupts(&mut self, mem: &mut Memory) {
+        // Don't handle if IME is disabled or no interrupts are pending
+        if !self.interrupt_master_enable {
+            return;
+        }
+
+        let interrupts = self.READ_8(mem, mem::ADDR_IE) & self.READ_8(mem, mem::ADDR_IF);
+        if interrupts == 0 {
+            return;
+        }
+
+        // Disable IME and push PC to stack.
+        self.interrupt_master_enable = false;
+        self.PUSH(mem, REG_WIDE::PC);
+
+        // Branch to interrupt handler and clear bit.
+        if interrupts & 1 << 0 != 0 {
+            // VBLANK
+            self.regs[PC] = mem::ADDR_INT_VBLANK;
+            mem.write_u8(mem::ADDR_IF, mem.read_8(mem::ADDR_IF) & !(1 << 0));
+        } else if interrupts & 1 << 1 != 0 {
+            // LCD STAT
+            self.regs[PC] = mem::ADDR_INT_LCDC;
+            mem.write_u8(mem::ADDR_IF, mem.read_8(mem::ADDR_IF) & !(1 << 1));
+        } else if interrupts & 1 << 2 != 0 {
+            // Timer
+            self.regs[PC] = mem::ADDR_INT_TIMER;
+            mem.write_u8(mem::ADDR_IF, mem.read_8(mem::ADDR_IF) & !(1 << 2));
+        } else if interrupts & 1 << 3 != 0 {
+            // Serial
+            self.regs[PC] = mem::ADDR_INT_SERIAL;
+            mem.write_u8(mem::ADDR_IF, mem.read_8(mem::ADDR_IF) & !(1 << 3));
+        } else if interrupts & 1 << 4 != 0 {
+            // Joypad
+            self.regs[PC] = mem::ADDR_INT_HTL_P0_P13;
+            mem.write_u8(mem::ADDR_IF, mem.read_8(mem::ADDR_IF) & !(1 << 4));
         }
     }
 
@@ -30,6 +86,8 @@ impl CPU {
         let instr: u8 = mem[self.regs[PC]];
         self.regs[PC] += 1;
         self.cycles += 1;
+
+        let mut scheduled_this_instruction = false;
 
         match instr {
             // NOP
@@ -937,7 +995,9 @@ impl CPU {
             0xD9 => {
                 self.POP(mem, PC);
                 self.cycles += 1;
-                todo!("RETI interrupt stuff");
+                // Should this be restoring a previous state or just setting straight to true?
+                // I'd imagine it could only have been true if an interrupt was triggered at all.
+                self.interrupt_master_enable = true;
             }
             // JP C, a16
             0xDA => {
@@ -1022,7 +1082,8 @@ impl CPU {
             }
             // DI
             0xF3 => {
-                todo!("Disable Interrupts");
+                self.interrupt_master_enable = false;
+                self.interrupt_enable_scheduled = false;
             }
             // PUSH AF
             0xF5 => {
@@ -1054,7 +1115,8 @@ impl CPU {
             }
             // EI
             0xFB => {
-                todo!("Enabled Interrupt");
+                self.interrupt_enable_scheduled = true;
+                scheduled_this_instruction = true;
             }
             // CP d8
             0xFE => {
@@ -1070,6 +1132,10 @@ impl CPU {
             0xD3 | 0xDB | 0xDD | 0xE3 | 0xE4 | 0xEB | 0xEC | 0xED | 0xF4 | 0xFC | 0xFD => {
                 log::error!("Undefined instruction: {:02X}", instr);
             }
+        }
+
+        if self.interrupt_enable_scheduled && !scheduled_this_instruction {
+            self.interrupt_master_enable = true;
         }
     }
 

@@ -51,13 +51,19 @@ Start Address
 Start Address
 */
 
-use std::ops::{Index, IndexMut};
+use std::ops::{Index, IndexMut, Range};
 
-pub const ADDR_INT_VBLANK: u16 = 0x0040;
-pub const ADDR_INT_LCDC: u16 = 0x0048;
-pub const ADDR_INT_TIMER: u16 = 0x0050;
-pub const ADDR_INT_SERIAL: u16 = 0x0058;
-pub const ADDR_INT_HTL_P0_P13: u16 = 0x0060;
+use crate::ppu::Tile;
+
+pub const ADDR_IE: u16 = 0xFFFF;
+pub const ADDR_IF: u16 = 0xFF0F;
+pub const ADDR_INT_VBLANK: u16 = 0x40;
+pub const ADDR_INT_LCDC: u16 = 0x48;
+pub const ADDR_INT_TIMER: u16 = 0x50;
+pub const ADDR_INT_SERIAL: u16 = 0x58;
+pub const ADDR_INT_HTL_P0_P13: u16 = 0x60;
+
+pub const ADDR_TILES: Range<u16> = 0x8000..0x97FF;
 
 pub struct Memory {
     map: [u8; 0x10000],
@@ -119,6 +125,25 @@ impl Memory {
         }
         Some(())
     }
+
+    pub fn get_tiles(&self, num_tiles: u8) -> Vec<Tile> {
+        let mut tiles = Vec::new();
+        for (i, addr) in ADDR_TILES.step_by(16).enumerate() {
+            if i > num_tiles as usize {
+                break;
+            }
+
+            tiles.push(Tile::from_bytes(
+                &self.map[addr as usize..addr as usize + 16]
+                    .try_into()
+                    .unwrap(),
+            ));
+        }
+
+        tiles
+    }
+
+    // pub fn get_tile(&mut self, index: u8) ->
 }
 
 impl Default for Memory {

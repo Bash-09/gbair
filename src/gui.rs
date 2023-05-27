@@ -1,4 +1,4 @@
-use egui::{Color32, RichText, ScrollArea, Ui};
+use egui::{Color32, Pos2, Rect, RichText, Rounding, ScrollArea, Ui, Vec2};
 
 use crate::{cpu::CPU, mem::Memory};
 
@@ -127,4 +127,39 @@ pub fn gui_mem(ui: &mut Ui, mem: &Memory, pc: u16) {
             }
         },
     );
+}
+
+pub fn gui_tiles(ui: &mut Ui, mem: &Memory) {
+    let tiles = mem.get_tiles(255);
+    let pixel_size = 3;
+    let size = pixel_size * 8 * 16 + 15;
+    let (_, space) = ui.allocate_space(Vec2::new(size as f32, size as f32));
+    let painter = ui.painter_at(space);
+
+    for y in 0..16 {
+        for x in 0..16 {
+            let tile = &tiles[y * 16 + x];
+            let tile_x = space.left() + (x * (pixel_size * 8) + x) as f32;
+            let tile_y = space.top() + (y * (pixel_size * 8) + y) as f32;
+            for py in 0..8 {
+                for px in 0..8 {
+                    let col_id = tile.pixels[py * 8 + px];
+                    if col_id == 0 {
+                        continue;
+                    }
+                    painter.rect_filled(
+                        Rect::from_min_size(
+                            Pos2::new(
+                                tile_x + (px * pixel_size) as f32,
+                                tile_y + (py * pixel_size) as f32,
+                            ),
+                            Vec2::new(pixel_size as f32, pixel_size as f32),
+                        ),
+                        Rounding::none(),
+                        Color32::from_gray(col_id * 64),
+                    );
+                }
+            }
+        }
+    }
 }
