@@ -1,7 +1,7 @@
 use crate::mem::Memory;
 
 enum DMAState {
-    Transferring(u16),
+    Transferring(u8),
     Idle,
 }
 
@@ -24,7 +24,9 @@ impl DMA {
         match &mut self.state {
             DMAState::Transferring(index) => {
                 if *index < 160 {
-                    todo!("DMA transfer");
+                    let offset = (self.last_request + *index) as u16;
+                    let data: u8 = mem.read_8(0xFF00 + offset);
+                    mem.write_u8(0xFFE0 + offset, data);
                     *index += 1;
                 } else {
                     self.state = DMAState::Idle;
@@ -38,6 +40,10 @@ impl DMA {
                 }
             }
         }
+    }
+
+    pub fn stop_transfer(&mut self) {
+        self.state = DMAState::Idle;
     }
 }
 

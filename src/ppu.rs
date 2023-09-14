@@ -2,6 +2,10 @@ use std::ops::Range;
 
 use crate::mem::Memory;
 
+// Hz
+pub const HORIZONTAL_SYNC: f64 = 9_198_000.0;
+pub const VERTICAL_SYNC: f64 = 59.73;
+
 /*
  Bit 7 - LCD Display Enable             (0=Off, 1=On)
  Bit 6 - Window Tile Map Display Select (0=9800-9BFF, 1=9C00-9FFF)

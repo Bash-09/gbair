@@ -6,7 +6,7 @@ use mem::Memory;
 use ppu::PPU;
 use winit::{dpi::LogicalSize, window::WindowBuilder};
 
-use crate::registers::REG_WIDE;
+use crate::{ppu::VERTICAL_SYNC, registers::REG_WIDE};
 
 pub mod cpu;
 pub mod dma;
@@ -24,6 +24,9 @@ struct App {
     step: bool,
     running: bool,
     last_cycle: Instant,
+
+    speed: f64,
+    last_frame: Instant,
 }
 
 impl App {
@@ -37,6 +40,9 @@ impl App {
             step: false,
             running: false,
             last_cycle: Instant::now(),
+
+            speed: 1.0,
+            last_frame: Instant::now(),
         }
     }
 }
@@ -49,6 +55,9 @@ impl wgpu_app::Application for App {
         let rom = include_bytes!("../roms/Tetris.dump");
         self.memory.write_bytes(0, rom);
         self.cpu.regs[REG_WIDE::PC] = 0x100;
+
+        self.dma.next_cycle(&mut self.memory);
+        self.dma.stop_transfer();
 
         // let tile = [
         //     0x3C, 0x7E, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x7E, 0x5E, 0x7E, 0x0A, 0x7C, 0x56,
@@ -63,14 +72,35 @@ impl wgpu_app::Application for App {
         ctx: &mut wgpu_app::context::Context,
     ) -> Result<(), egui_wgpu::wgpu::SurfaceError> {
         // ******************* RUN THE GAME BOY
-        if self.running && self.last_cycle.elapsed().as_secs_f64() >= 1.0 / 1_000_000.0 {
-            self.last_cycle = Instant::now();
-            self.cpu.next_cycle(&mut self.memory);
-            self.dma.next_cycle(&mut self.memory);
-        } else if self.step {
-            self.cpu.next_instruction(&mut self.memory);
-            self.step = false;
+
+        loop {
+            let elapsed_cycle = self.last_cycle.elapsed().as_secs_f64();
+            const CYCLE_TIME: f64 = 1.0 / 1_050_000.0;
+            if self.step || (self.running && elapsed_cycle >= CYCLE_TIME) {
+                self.speed = CYCLE_TIME / elapsed_cycle;
+
+                if self.step {
+                    self.cpu.cycles = 0;
+                }
+
+                self.last_cycle = Instant::now();
+                self.cpu.next_cycle(&mut self.memory);
+                self.dma.next_cycle(&mut self.memory);
+
+                if self.step {
+                    self.step = false;
+                    break;
+                }
+            }
+
+            // Refresh rate
+            let elapsed_frame = self.last_frame.elapsed().as_secs_f64();
+            if elapsed_frame >= 1.0 / VERTICAL_SYNC {
+                break;
+            }
         }
+
+        self.last_frame = Instant::now();
 
         // ****************** RENDER
         let output = ctx.wgpu_state.surface.get_current_texture()?;
@@ -85,6 +115,8 @@ impl wgpu_app::Application for App {
                 gui::gui_tiles(ui, &self.memory);
             });
             egui::Window::new("Controls").show(gui_ctx, |ui| {
+                ui.label(format!("Speed: {:.2}%", self.speed * 100.0));
+
                 if ui
                     .button(if self.running { "Pause" } else { "Start" })
                     .clicked()
