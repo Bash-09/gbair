@@ -31,8 +31,49 @@ pub struct Registers {
     pc: u16,
 }
 
+#[derive(Debug, Copy, Clone)]
+pub enum Flag {
+    // Zero
+    Z,
+    // Negative
+    N,
+    // Half-Carry
+    H,
+    // Carry
+    C,
+}
+
+impl Flag {
+    fn mask(&self) -> u8 {
+        match self {
+            Flag::Z => 0b10000000,
+            Flag::N => 0b01000000,
+            Flag::H => 0b00100000,
+            Flag::C => 0b00010000,
+        }
+    }
+}
+
 pub struct Flags {
     flags: u8,
+}
+
+impl Flags {
+    pub fn new() -> Flags {
+        Flags { flags: 0 }
+    }
+
+    pub fn read(&self, flag: Flag) -> bool {
+        (self.flags & flag.mask()) > 0
+    }
+
+    pub fn set(&mut self, flag: Flag, set: bool) {
+        if set {
+            self.flags |= flag.mask();
+        } else {
+            self.flags &= !flag.mask();
+        }
+    }
 }
 
 #[repr(C)]
@@ -135,63 +176,6 @@ impl Registers {
 impl Default for Registers {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-impl Flags {
-    pub fn new() -> Flags {
-        Flags { flags: 0 }
-    }
-    pub fn get(&self) -> u8 {
-        self.flags
-    }
-    /// Read the Zero flag
-    pub fn z(&self) -> bool {
-        (self.flags & 0b10000000) > 0
-    }
-    /// Read the Negative flag
-    pub fn n(&self) -> bool {
-        (self.flags & 0b01000000) > 0
-    }
-    /// Read the Half-Carry flag
-    pub fn h(&self) -> bool {
-        (self.flags & 0b00100000) > 0
-    }
-    /// Read the Carry flag
-    pub fn c(&self) -> bool {
-        (self.flags & 0b00010000) > 0
-    }
-    /// Set the Zero flag
-    pub fn set_z(&mut self, set: bool) {
-        if set {
-            self.flags |= 0b10000000;
-        } else {
-            self.flags &= 0b01111111
-        }
-    }
-    /// Set the Negative flag
-    pub fn set_n(&mut self, set: bool) {
-        if set {
-            self.flags |= 0b01000000;
-        } else {
-            self.flags &= 0b10111111
-        }
-    }
-    /// Set the Half-carry flag
-    pub fn set_h(&mut self, set: bool) {
-        if set {
-            self.flags |= 0b00100000;
-        } else {
-            self.flags &= 0b11011111
-        }
-    }
-    /// Set the carry flag
-    pub fn set_c(&mut self, set: bool) {
-        if set {
-            self.flags |= 0b00010000;
-        } else {
-            self.flags &= 0b11101111
-        }
     }
 }
 

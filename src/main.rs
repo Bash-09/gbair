@@ -11,6 +11,7 @@ use crate::{ppu::VERTICAL_SYNC, registers::REG_WIDE};
 pub mod cpu;
 pub mod dma;
 pub mod gui;
+pub mod instr;
 pub mod mem;
 pub mod ppu;
 pub mod registers;
@@ -52,7 +53,8 @@ impl wgpu_app::Application for App {
         log::info!("Initializing");
 
         // let rom = include_bytes!("../roms/Tetris.gb");
-        let rom = include_bytes!("../roms/Tetris.dump");
+        // let rom = include_bytes!("../roms/Tetris.dump");
+        let rom = include_bytes!("../roms/tetris.gb");
         self.memory.write_bytes(0, rom);
         self.cpu.regs[REG_WIDE::PC] = 0x100;
 

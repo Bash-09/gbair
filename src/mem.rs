@@ -51,7 +51,7 @@ Start Address
 Start Address
 */
 
-use std::ops::{Index, IndexMut, Range};
+use std::ops::{Index, Range};
 
 use crate::ppu::Tile;
 
@@ -65,8 +65,12 @@ pub const ADDR_INT_HTL_P0_P13: u16 = 0x60;
 
 pub const ADDR_TILES: Range<u16> = 0x8000..0x97FF;
 
+pub const MEM_SIZE: usize = 0x10000;
+
+pub type Addr = u16;
+
 pub struct Memory {
-    map: [u8; 0x10000],
+    map: [u8; MEM_SIZE],
 }
 
 impl Index<u16> for Memory {

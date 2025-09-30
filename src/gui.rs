@@ -1,6 +1,6 @@
 use egui::{Color32, Pos2, Rect, RichText, Rounding, ScrollArea, Ui, Vec2};
 
-use crate::{cpu::CPU, mem::Memory};
+use crate::{cpu::CPU, mem::Memory, registers::Flag};
 
 pub fn gui_cpu(ui: &mut Ui, cpu: &mut CPU) {
     use crate::registers::REG::*;
@@ -48,18 +48,18 @@ pub fn gui_cpu(ui: &mut Ui, cpu: &mut CPU) {
 
     ui.heading("Flags");
     ui.horizontal(|ui| {
-        let mut z = cpu.flags.z();
+        let mut z = cpu.flags.read(Flag::Z);
         ui.checkbox(&mut z, "Z");
-        cpu.flags.set_z(z);
-        let mut n = cpu.flags.n();
+        cpu.flags.set(Flag::Z, z);
+        let mut n = cpu.flags.read(Flag::N);
         ui.checkbox(&mut n, "N");
-        cpu.flags.set_n(n);
-        let mut h = cpu.flags.h();
+        cpu.flags.set(Flag::N, n);
+        let mut h = cpu.flags.read(Flag::H);
         ui.checkbox(&mut h, "H");
-        cpu.flags.set_h(h);
-        let mut c = cpu.flags.c();
+        cpu.flags.set(Flag::H, h);
+        let mut c = cpu.flags.read(Flag::C);
         ui.checkbox(&mut c, "C");
-        cpu.flags.set_c(c);
+        cpu.flags.set(Flag::C, c);
     });
 
     ui.label(format!("Cycles: {}", cpu.cycles));

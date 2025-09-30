@@ -3,7 +3,7 @@
 use crate::{
     mem::{self, Memory},
     registers::{
-        Flags, Registers,
+        Flag, Flags, Registers,
         REG::{self, *},
         REG_WIDE::{self, *},
     },
@@ -81,6 +81,15 @@ impl CPU {
         }
     }
 
+    // pub fn next_instruction_summary(&self, mem: &mut Memory) -> String {
+    //     let instr: u8 = mem[self.regs[PC]];
+    //     match instr {
+    //         0x00 => String::from("NOP"),
+    //         0x01 => format!("LD BC, {:02X}", )
+    //     }
+
+    // }
+
     /// Decodes and executes the next instruction regardless of current cycle counts or interrupt
     pub fn next_instruction(&mut self, mem: &mut Memory) {
         let instr: u8 = mem[self.regs[PC]];
@@ -119,10 +128,10 @@ impl CPU {
             // RLCA
             0x07 => {
                 self.regs[A] = self.regs[A].rotate_left(1);
-                self.flags.set_z(false);
-                self.flags.set_n(false);
-                self.flags.set_h(false);
-                self.flags.set_c(self.regs[A] & 0b1 == 0b1);
+                self.flags.set(Flag::Z, false);
+                self.flags.set(Flag::N, false);
+                self.flags.set(Flag::H, false);
+                self.flags.set(Flag::C, self.regs[A] & 0b1 == 0b1);
             }
             // LD (a16), SP
             0x08 => {
@@ -155,10 +164,10 @@ impl CPU {
             }
             // RRCA
             0x0F => {
-                self.flags.set_z(false);
-                self.flags.set_n(false);
-                self.flags.set_h(false);
-                self.flags.set_c(self.regs[A] & 0b1 == 0b1);
+                self.flags.set(Flag::Z, false);
+                self.flags.set(Flag::C, false);
+                self.flags.set(Flag::H, false);
+                self.flags.set(Flag::C, self.regs[A] & 0b1 == 0b1);
                 self.regs[A] = self.regs[A].rotate_right(1);
             }
             // STOP
@@ -191,11 +200,11 @@ impl CPU {
             }
             // RLA
             0x17 => {
-                let carry = self.flags.c();
-                self.flags.set_z(false);
-                self.flags.set_n(false);
-                self.flags.set_h(false);
-                self.flags.set_c(self.regs[A] & 0x80 != 0);
+                let carry = self.flags.read(Flag::C);
+                self.flags.set(Flag::Z, false);
+                self.flags.set(Flag::C, false);
+                self.flags.set(Flag::H, false);
+                self.flags.set(Flag::C, self.regs[A] & 0x80 != 0);
                 self.regs[A] <<= 1;
                 if carry {
                     self.regs[A] |= 1;
@@ -232,11 +241,11 @@ impl CPU {
             }
             // RRA
             0x1F => {
-                let carry = self.flags.c();
-                self.flags.set_z(false);
-                self.flags.set_n(false);
-                self.flags.set_h(false);
-                self.flags.set_c(self.regs[A] & 0b1 == 0b1);
+                let carry = self.flags.read(Flag::C);
+                self.flags.set(Flag::Z, false);
+                self.flags.set(Flag::C, false);
+                self.flags.set(Flag::H, false);
+                self.flags.set(Flag::C, self.regs[A] & 0b1 == 0b1);
                 self.regs[A] >>= 1;
                 if carry {
                     self.regs[A] |= 0x80;
@@ -244,7 +253,7 @@ impl CPU {
             }
             // JR NZ, s8
             0x20 => {
-                self.JR_C(mem, !self.flags.z());
+                self.JR_C(mem, !self.flags.read(Flag::Z));
             }
             // LD HL, d16
             0x21 => {
@@ -277,7 +286,7 @@ impl CPU {
             }
             // JR Z, s8
             0x28 => {
-                self.JR_C(mem, self.flags.z());
+                self.JR_C(mem, self.flags.read(Flag::Z));
             }
             // ADD HL, HL
             0x29 => {
@@ -306,13 +315,13 @@ impl CPU {
             }
             // CPL
             0x2F => {
-                self.flags.set_n(true);
-                self.flags.set_h(true);
+                self.flags.set(Flag::C, true);
+                self.flags.set(Flag::H, true);
                 self.regs[L] = !self.regs[L];
             }
             // JR NC, s8
             0x30 => {
-                self.JR_C(mem, !self.flags.c());
+                self.JR_C(mem, !self.flags.read(Flag::C));
             }
             // LD SP, d16
             0x31 => {
@@ -341,13 +350,13 @@ impl CPU {
             }
             // SCF
             0x37 => {
-                self.flags.set_n(false);
-                self.flags.set_h(false);
-                self.flags.set_c(true);
+                self.flags.set(Flag::C, false);
+                self.flags.set(Flag::H, false);
+                self.flags.set(Flag::C, true);
             }
             // JR C, s8
             0x38 => {
-                self.JR_C(mem, self.flags.c());
+                self.JR_C(mem, self.flags.read(Flag::C));
             }
             // ADD HL, SP
             0x39 => {
@@ -376,9 +385,9 @@ impl CPU {
             }
             // CCF
             0x3F => {
-                self.flags.set_n(false);
-                self.flags.set_h(false);
-                self.flags.set_c(!self.flags.c());
+                self.flags.set(Flag::C, false);
+                self.flags.set(Flag::H, false);
+                self.flags.set(Flag::C, !self.flags.read(Flag::C));
             }
             // LD B, B
             0x40 => {
@@ -894,7 +903,7 @@ impl CPU {
             }
             // RET NZ
             0xC0 => {
-                self.RET_C(mem, !self.flags.z());
+                self.RET_C(mem, !self.flags.read(Flag::Z));
             }
             // POP BC
             0xC1 => {
@@ -902,7 +911,7 @@ impl CPU {
             }
             // JP NZ, a16
             0xC2 => {
-                self.JP_C_AA(mem, !self.flags.z());
+                self.JP_C_AA(mem, !self.flags.read(Flag::Z));
             }
             // JP a16
             0xC3 => {
@@ -910,7 +919,7 @@ impl CPU {
             }
             // CALL NZ, a16
             0xC4 => {
-                self.CALL_C(mem, !self.flags.z());
+                self.CALL_C(mem, !self.flags.read(Flag::Z));
             }
             // PUSH BC
             0xC5 => {
@@ -927,7 +936,7 @@ impl CPU {
             }
             // RET Z
             0xC8 => {
-                self.RET_C(mem, self.flags.z());
+                self.RET_C(mem, self.flags.read(Flag::Z));
             }
             // RET
             0xC9 => {
@@ -935,7 +944,7 @@ impl CPU {
             }
             // JP Z, a16
             0xCA => {
-                self.JP_C_AA(mem, self.flags.z());
+                self.JP_C_AA(mem, self.flags.read(Flag::Z));
             }
             // Double Instruction
             0xCB => {
@@ -943,7 +952,7 @@ impl CPU {
             }
             // CALL Z, a16
             0xCC => {
-                self.CALL_C(mem, self.flags.z());
+                self.CALL_C(mem, self.flags.read(Flag::Z));
             }
             // CALL a16
             0xCD => {
@@ -960,7 +969,7 @@ impl CPU {
             }
             // RET NC
             0xD0 => {
-                self.RET_C(mem, !self.flags.c());
+                self.RET_C(mem, !self.flags.read(Flag::C));
             }
             // POP DE
             0xD1 => {
@@ -968,11 +977,11 @@ impl CPU {
             }
             // JP NC, a16
             0xD2 => {
-                self.JP_C_AA(mem, !self.flags.c());
+                self.JP_C_AA(mem, !self.flags.read(Flag::C));
             }
             // CALL NC, a16
             0xD4 => {
-                self.CALL_C(mem, !self.flags.c());
+                self.CALL_C(mem, !self.flags.read(Flag::C));
             }
             // PUSH DE
             0xD5 => {
@@ -989,7 +998,7 @@ impl CPU {
             }
             // RET C
             0xD8 => {
-                self.RET_C(mem, self.flags.c());
+                self.RET_C(mem, self.flags.read(Flag::C));
             }
             // RETI
             0xD9 => {
@@ -1001,11 +1010,11 @@ impl CPU {
             }
             // JP C, a16
             0xDA => {
-                self.JP_C_AA(mem, self.flags.c());
+                self.JP_C_AA(mem, self.flags.read(Flag::C));
             }
             // CALL C, a16
             0xDC => {
-                self.CALL_C(mem, self.flags.c());
+                self.CALL_C(mem, self.flags.read(Flag::C));
             }
             // SBC A, d8
             0xDE => {
@@ -1229,27 +1238,27 @@ impl CPU {
     }
 
     fn ADD(&mut self, lhs: u8, rhs: u8) -> u8 {
-        self.flags.set_h(Self::half_carry_add_u8(lhs, rhs));
-        self.flags.set_n(false);
-        self.flags.set_c(lhs.checked_add(rhs).is_none());
-        self.flags.set_z(lhs.wrapping_add(rhs) == 0);
+        self.flags.set(Flag::H, Self::half_carry_add_u8(lhs, rhs));
+        self.flags.set(Flag::C, false);
+        self.flags.set(Flag::C, lhs.checked_add(rhs).is_none());
+        self.flags.set(Flag::Z, lhs.wrapping_add(rhs) == 0);
         lhs.wrapping_add(rhs)
     }
 
     fn ADD_WIDE(&mut self, lhs: u16, rhs: u16) -> u16 {
-        self.flags.set_h(Self::half_carry_add_u16(lhs, rhs));
-        self.flags.set_n(false);
-        self.flags.set_c(lhs.checked_add(rhs).is_none());
-        self.flags.set_z(lhs.wrapping_add(rhs) == 0);
+        self.flags.set(Flag::H, Self::half_carry_add_u16(lhs, rhs));
+        self.flags.set(Flag::C, false);
+        self.flags.set(Flag::C, lhs.checked_add(rhs).is_none());
+        self.flags.set(Flag::Z, lhs.wrapping_add(rhs) == 0);
         self.cycles += 2;
         lhs.wrapping_add(rhs)
     }
 
     fn SUB(&mut self, lhs: u8, rhs: u8) -> u8 {
-        self.flags.set_z(lhs.wrapping_sub(rhs) == 0);
-        self.flags.set_n(true);
-        self.flags.set_h(Self::half_carry_sub_u8(lhs, rhs));
-        self.flags.set_c(lhs.checked_sub(rhs).is_none());
+        self.flags.set(Flag::Z, lhs.wrapping_sub(rhs) == 0);
+        self.flags.set(Flag::C, true);
+        self.flags.set(Flag::H, Self::half_carry_sub_u8(lhs, rhs));
+        self.flags.set(Flag::C, lhs.checked_sub(rhs).is_none());
         lhs.wrapping_sub(rhs)
     }
 
@@ -1267,13 +1276,13 @@ impl CPU {
     }
 
     fn ADC(&mut self, lhs: u8, rhs: u8) -> u8 {
-        let c = if self.flags.c() { 1 } else { 0 };
+        let c = if self.flags.read(Flag::C) { 1 } else { 0 };
         let h = (lhs & 0x0F).wrapping_add(rhs & 0x0F).wrapping_add(c) & 0x10 == 0x10;
         let ans = lhs.wrapping_add(rhs).wrapping_add(c);
-        self.flags.set_z(ans == 0);
-        self.flags.set_n(false);
-        self.flags.set_h(h);
-        self.flags.set_c(ans < lhs);
+        self.flags.set(Flag::Z, ans == 0);
+        self.flags.set(Flag::C, false);
+        self.flags.set(Flag::H, h);
+        self.flags.set(Flag::C, ans < lhs);
         ans
     }
 
@@ -1296,13 +1305,13 @@ impl CPU {
     }
 
     fn SBC(&mut self, lhs: u8, rhs: u8) -> u8 {
-        let c = if self.flags.c() { 1 } else { 0 };
+        let c = if self.flags.read(Flag::C) { 1 } else { 0 };
         let h = (lhs & 0x0F).wrapping_sub(rhs & 0x0F).wrapping_sub(c) & 0x10 == 0x10;
         let ans = lhs.wrapping_sub(rhs).wrapping_sub(c);
-        self.flags.set_z(ans == 0);
-        self.flags.set_n(true);
-        self.flags.set_h(h);
-        self.flags.set_c(ans > lhs);
+        self.flags.set(Flag::Z, ans == 0);
+        self.flags.set(Flag::C, true);
+        self.flags.set(Flag::H, h);
+        self.flags.set(Flag::C, ans > lhs);
         ans
     }
 
@@ -1317,10 +1326,10 @@ impl CPU {
 
     fn AND(&mut self, lhs: u8, rhs: u8) -> u8 {
         let ans = lhs & rhs;
-        self.flags.set_z(ans == 0);
-        self.flags.set_n(false);
-        self.flags.set_h(true);
-        self.flags.set_c(false);
+        self.flags.set(Flag::Z, ans == 0);
+        self.flags.set(Flag::C, false);
+        self.flags.set(Flag::H, true);
+        self.flags.set(Flag::C, false);
         ans
     }
 
@@ -1335,10 +1344,10 @@ impl CPU {
 
     fn XOR(&mut self, lhs: u8, rhs: u8) -> u8 {
         let ans = lhs ^ rhs;
-        self.flags.set_z(ans == 0);
-        self.flags.set_n(false);
-        self.flags.set_h(false);
-        self.flags.set_c(false);
+        self.flags.set(Flag::Z, ans == 0);
+        self.flags.set(Flag::C, false);
+        self.flags.set(Flag::H, false);
+        self.flags.set(Flag::C, false);
         ans
     }
 
@@ -1353,10 +1362,10 @@ impl CPU {
 
     fn OR(&mut self, lhs: u8, rhs: u8) -> u8 {
         let ans = lhs | rhs;
-        self.flags.set_z(ans == 0);
-        self.flags.set_n(false);
-        self.flags.set_h(false);
-        self.flags.set_c(false);
+        self.flags.set(Flag::Z, ans == 0);
+        self.flags.set(Flag::C, false);
+        self.flags.set(Flag::H, false);
+        self.flags.set(Flag::C, false);
         ans
     }
 
@@ -1370,10 +1379,10 @@ impl CPU {
     }
 
     fn CP(&mut self, lhs: u8, rhs: u8) {
-        self.flags.set_z(lhs.wrapping_sub(rhs) == 0);
-        self.flags.set_n(true);
-        self.flags.set_h(Self::half_carry_sub_u8(lhs, rhs));
-        self.flags.set_c(lhs.checked_sub(rhs).is_none());
+        self.flags.set(Flag::Z, lhs.wrapping_sub(rhs) == 0);
+        self.flags.set(Flag::C, true);
+        self.flags.set(Flag::H, Self::half_carry_sub_u8(lhs, rhs));
+        self.flags.set(Flag::C, lhs.checked_sub(rhs).is_none());
     }
 
     fn CP_R_R(&mut self, lhs: REG, rhs: REG) {
@@ -1387,34 +1396,36 @@ impl CPU {
 
     fn INC(&mut self, lhs: u8) -> u8 {
         let ans = lhs.wrapping_add(1);
-        self.flags.set_z(ans == 0);
-        self.flags.set_n(false);
-        self.flags.set_h(Self::half_carry_add_u8(lhs, 1));
+        self.flags.set(Flag::Z, ans == 0);
+        self.flags.set(Flag::C, false);
+        self.flags.set(Flag::H, Self::half_carry_add_u8(lhs, 1));
+        self.cycles += 1;
         ans
     }
 
     fn DEC(&mut self, lhs: u8) -> u8 {
         let ans = lhs.wrapping_sub(1);
-        self.flags.set_z(ans == 0);
-        self.flags.set_n(false);
-        self.flags.set_h(Self::half_carry_sub_u8(lhs, 1));
+        self.flags.set(Flag::Z, ans == 0);
+        self.flags.set(Flag::C, false);
+        self.flags.set(Flag::H, Self::half_carry_sub_u8(lhs, 1));
+        self.cycles += 1;
         ans
     }
 
     fn INC_WIDE(&mut self, lhs: u16) -> u16 {
         let ans = lhs.wrapping_add(1);
-        self.flags.set_z(ans == 0);
-        self.flags.set_n(false);
-        self.flags.set_h(Self::half_carry_add_u16(lhs, 1));
+        self.flags.set(Flag::Z, ans == 0);
+        self.flags.set(Flag::C, false);
+        self.flags.set(Flag::H, Self::half_carry_add_u16(lhs, 1));
         self.cycles += 2;
         ans
     }
 
     fn DEC_WIDE(&mut self, lhs: u16) -> u16 {
         let ans = lhs.wrapping_sub(1);
-        self.flags.set_z(ans == 0);
-        self.flags.set_n(false);
-        self.flags.set_h(Self::half_carry_sub_u16(lhs, 1));
+        self.flags.set(Flag::Z, ans == 0);
+        self.flags.set(Flag::C, false);
+        self.flags.set(Flag::H, Self::half_carry_sub_u16(lhs, 1));
         self.cycles += 2;
         ans
     }
