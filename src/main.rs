@@ -28,6 +28,12 @@ struct App {
 
     speed: f64,
     last_frame: Instant,
+
+    pc_trace: Vec<u16>,
+    op_trace: Vec<&'static str>,
+    summmary_trace: Vec<String>,
+    next_op: &'static str,
+    next_summary: String,
 }
 
 impl App {
@@ -44,6 +50,12 @@ impl App {
 
             speed: 1.0,
             last_frame: Instant::now(),
+
+            pc_trace: Vec::new(),
+            op_trace: Vec::new(),
+            summmary_trace: Vec::new(),
+            next_op: "",
+            next_summary: String::new(),
         }
     }
 }
@@ -75,19 +87,37 @@ impl wgpu_app::Application for App {
     ) -> Result<(), egui_wgpu::wgpu::SurfaceError> {
         // ******************* RUN THE GAME BOY
 
+        self.next_op = self.cpu.next_instruction_opcode(&self.memory);
+        self.next_summary = self.cpu.next_instruction_summary(&self.memory);
+
         loop {
             let elapsed_cycle = self.last_cycle.elapsed().as_secs_f64();
             const CYCLE_TIME: f64 = 1.0 / 1_050_000.0;
             if self.step || (self.running && elapsed_cycle >= CYCLE_TIME) {
                 self.speed = CYCLE_TIME / elapsed_cycle;
+                let mut executed = false;
 
                 if self.step {
                     self.cpu.cycles = 0;
                 }
 
+                if self.cpu.cycles <= 1 {
+                    self.pc_trace.push(self.cpu.regs[REG_WIDE::PC]);
+                    self.op_trace
+                        .push(self.cpu.next_instruction_opcode(&self.memory));
+                    self.summmary_trace
+                        .push(self.cpu.next_instruction_summary(&self.memory));
+                    executed = true;
+                }
+
                 self.last_cycle = Instant::now();
                 self.cpu.next_cycle(&mut self.memory);
                 self.dma.next_cycle(&mut self.memory);
+
+                if executed {
+                    self.next_op = self.cpu.next_instruction_opcode(&self.memory);
+                    self.next_summary = self.cpu.next_instruction_summary(&self.memory);
+                }
 
                 if self.step {
                     self.step = false;
@@ -129,6 +159,16 @@ impl wgpu_app::Application for App {
                     self.step = true;
                 }
             });
+            egui::Window::new("Trace").show(gui_ctx, |ui| {
+                gui::gui_trace(
+                    ui,
+                    &self.pc_trace,
+                    &self.op_trace,
+                    &self.summmary_trace,
+                    &self.next_op,
+                    &self.next_summary,
+                );
+            });
         });
         output.present();
 
@@ -154,6 +194,6 @@ fn main() {
 
     let wb = WindowBuilder::new()
         .with_title("gbair")
-        .with_inner_size(LogicalSize::new(1000, 800));
+        .with_inner_size(LogicalSize::new(1000, 1000));
     wgpu_app::run(app, wb);
 }

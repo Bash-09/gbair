@@ -81,14 +81,689 @@ impl CPU {
         }
     }
 
-    // pub fn next_instruction_summary(&self, mem: &mut Memory) -> String {
-    //     let instr: u8 = mem[self.regs[PC]];
-    //     match instr {
-    //         0x00 => String::from("NOP"),
-    //         0x01 => format!("LD BC, {:02X}", )
-    //     }
+    pub fn next_instruction_summary(&self, mem: &Memory) -> String {
+        let opcode = self.next_instruction_opcode(mem);
+        let mut out = opcode.to_string();
 
-    // }
+        if out.contains(", (AF)") {
+            out = out.replace(
+                ", (AF)",
+                &format!(
+                    ", ({:#04X})={:#04X}",
+                    self.regs[AF],
+                    mem.read_16(self.regs[AF])
+                ),
+            );
+        }
+        if out.contains(", (BC)") {
+            out = out.replace(
+                ", (BC)",
+                &format!(
+                    ", ({:#04X})={:#04X}",
+                    self.regs[BC],
+                    mem.read_16(self.regs[BC])
+                ),
+            );
+        }
+        if out.contains(", (DE)") {
+            out = out.replace(
+                ", (DE)",
+                &format!(
+                    ", ({:#04X})={:#04X}",
+                    self.regs[DE],
+                    mem.read_16(self.regs[DE])
+                ),
+            );
+        }
+        if out.contains(", (HL)") {
+            out = out.replace(
+                ", (HL)",
+                &format!(
+                    ", ({:#04X})={:#04X}",
+                    self.regs[HL],
+                    mem.read_16(self.regs[HL])
+                ),
+            );
+        }
+        if out.contains(", (HL+)") {
+            out = out.replace(
+                ", (HL+)",
+                &format!(
+                    ", ({:#04X}+)={:#04X}",
+                    self.regs[HL],
+                    mem.read_16(self.regs[HL])
+                ),
+            );
+        }
+        if out.contains(", (HL-)") {
+            out = out.replace(
+                ", (HL-)",
+                &format!(
+                    ", ({:#04X}-)={:#04X}",
+                    self.regs[HL],
+                    mem.read_16(self.regs[HL])
+                ),
+            );
+        }
+        if out.contains(", (SP)") {
+            out = out.replace(
+                ", (SP)",
+                &format!(
+                    ", ({:#04X})={:#04X}",
+                    self.regs[SP],
+                    mem.read_16(self.regs[SP])
+                ),
+            );
+        }
+        if out.contains(", (PC)") {
+            out = out.replace(
+                ", (PC)",
+                &format!(
+                    ", ({:#04X})={:#04X}",
+                    self.regs[PC],
+                    mem.read_16(self.regs[PC])
+                ),
+            );
+        }
+        if out.contains(", (a16)") {
+            out = out.replace(
+                ", (a16)",
+                &format!(
+                    ", ({:#04X})={:#04X}",
+                    mem.read_16(self.regs[PC].wrapping_add(1)),
+                    mem.read_16(mem.read_16(self.regs[PC].wrapping_add(1)))
+                ),
+            );
+        }
+        if out.contains(", (a8)") {
+            out = out.replace(
+                ", (a8)",
+                &format!(
+                    ", ({:#04X})={:#04X}",
+                    (mem.read_8(self.regs[PC].wrapping_add(1)) as u16).wrapping_add(0xFF00),
+                    mem.read_16(
+                        (mem.read_8(self.regs[PC].wrapping_add(1)) as u16).wrapping_add(0xFF00)
+                    )
+                ),
+            );
+        }
+
+        if out.contains(", AF") {
+            out = out.replace(", AF", &format!(", {:#04X}", self.regs[AF]));
+        }
+        if out.contains(", BC") {
+            out = out.replace(", BC", &format!(", {:#04X}", self.regs[BC]));
+        }
+        if out.contains(", DE") {
+            out = out.replace(", DE", &format!(", {:#04X}", self.regs[DE]));
+        }
+        if out.contains(", HL") {
+            out = out.replace(", HL", &format!(", {:#04X}", self.regs[HL]));
+        }
+        if out.contains(", SP") {
+            out = out.replace(", SP", &format!(", {:#04X}", self.regs[SP]));
+        }
+        if out.contains(", PC") {
+            out = out.replace(", PC", &format!(", {:#04X}", self.regs[PC]));
+        }
+
+        if out.contains("(AF)") {
+            out = out.replace("(AF)", &format!("({:#04X})", self.regs[AF]));
+        }
+        if out.contains("(BC)") {
+            out = out.replace("(BC)", &format!("({:#04X})", self.regs[BC]));
+        }
+        if out.contains("(DE)") {
+            out = out.replace("(DE)", &format!("({:#04X})", self.regs[DE]));
+        }
+        if out.contains("(HL)") {
+            out = out.replace("(HL)", &format!("({:#04X})", self.regs[HL]));
+        }
+        if out.contains("(HL+)") {
+            out = out.replace("(HL+)", &format!("({:#04X})", self.regs[HL]));
+        }
+        if out.contains("(HL-)") {
+            out = out.replace("(HL-)", &format!("({:#04X})", self.regs[HL]));
+        }
+        if out.contains("(SP)") {
+            out = out.replace("(SP)", &format!("({:#04X})", self.regs[SP]));
+        }
+        if out.contains("(PC)") {
+            out = out.replace("(PC)", &format!("({:#04X})", self.regs[PC]));
+        }
+
+        if out.contains("a16") {
+            out = out.replace(
+                "a16",
+                &format!("{:#04X}", mem.read_16(self.regs[PC].wrapping_add(1))),
+            );
+        }
+        if out.contains("a8") {
+            out = out.replace(
+                "a8",
+                &format!(
+                    "{:#04X}",
+                    (mem.read_8(self.regs[PC].wrapping_add(1)) as u16).wrapping_add(0xFF00)
+                ),
+            );
+        }
+        if out.contains("d16") {
+            out = out.replace(
+                "d16",
+                &format!("{:#04X}", mem.read_16(self.regs[PC].wrapping_add(1))),
+            );
+        }
+        if out.contains("d8") {
+            out = out.replace(
+                "d8",
+                &format!("{:#04X}", mem.read_8(self.regs[PC].wrapping_add(1))),
+            );
+        }
+        if out.contains("s8") {
+            out = out.replace(
+                "s8",
+                &format!("{}", mem.read_8(self.regs[PC].wrapping_add(1)) as i8),
+            );
+        }
+
+        return out;
+    }
+
+    pub fn next_instruction_opcode(&self, mem: &Memory) -> &'static str {
+        match mem[self.regs[PC]] {
+            // NOP
+            0x00 => "NOP",
+            // LD BC, d16
+            0x01 => "LD BC, d16",
+            // LD (BC), A
+            0x02 => "LD (BC), A",
+            // INC BC
+            0x03 => "INC BC",
+            // INC B
+            0x04 => "INC B",
+            // DEC B
+            0x05 => "DEC B",
+            // LD B, d8
+            0x06 => "LD B, d8",
+            // RLCA
+            0x07 => "RLCA",
+            // LD (a16), SP
+            0x08 => "LD (a16), SP",
+            // ADD HL, BC
+            0x09 => "ADD HL, BC",
+            // LD A, (BC)
+            0x0A => "LD A, (BC)",
+            // DEC BC
+            0x0B => "DEC BC",
+            // INC C
+            0x0C => "INC C",
+            // DEC C
+            0x0D => "DEC C",
+            // LD C, d8
+            0x0E => "LD C, d8",
+            // RRCA
+            0x0F => "RRCA",
+            // STOP
+            0x10 => "STOP",
+            // LD DE, d16
+            0x11 => "LD DE, d16",
+            // LD (DE), A
+            0x12 => "LD (DE), A",
+            // INC DE
+            0x13 => "INC DE",
+            // INC D
+            0x14 => "INC D",
+            // DEC D
+            0x15 => "DEC D",
+            // LD D, d8
+            0x16 => "LD D, d8",
+            // RLA
+            0x17 => "RLA",
+            // JR s8
+            0x18 => "JR s8",
+            // ADD HL, DE
+            0x19 => "ADD HL, DE",
+            // LD A, (DE)
+            0x1A => "LD A, (DE)",
+            // DEC DE
+            0x1B => "DEC DE",
+            // INC E
+            0x1C => "INC E",
+            // DEC E
+            0x1D => "DEC E",
+            // LD E, d8
+            0x1E => "LD E, d8",
+            // RRA
+            0x1F => "RRA",
+            // JR NZ, s8
+            0x20 => "JR NZ, s8",
+            // LD HL, d16
+            0x21 => "LD HL, d16",
+            // LD (HL+), A
+            0x22 => "LD (HL+), A",
+            // INC HL
+            0x23 => "INC HL",
+            // INC H
+            0x24 => "INC H",
+            // DEC H
+            0x25 => "DEC H",
+            // LD H, d8
+            0x26 => "LD H, d8",
+            // DAA
+            0x27 => "DAA",
+            // JR Z, s8
+            0x28 => "JR Z, s8",
+            // ADD HL, HL
+            0x29 => "ADD HL, HL",
+            // LD A, (HL+)
+            0x2A => "LD A, (HL+)",
+            // DEC HL
+            0x2B => "DEC HL",
+            // INC L
+            0x2C => "INC L",
+            // DEC L
+            0x2D => "DEC L",
+            // LD L, d8
+            0x2E => "LD L, d8",
+            // CPL
+            0x2F => "CPL",
+            // JR NC, s8
+            0x30 => "JR NC, s8",
+            // LD SP, d16
+            0x31 => "LD SP, d16",
+            // LD (HL-), A
+            0x32 => "LD (HL-), A",
+            // INC SP
+            0x33 => "INC SP",
+            // INC (HL)
+            0x34 => "INC (HL)",
+            // DEC (HL)
+            0x35 => "DEC (HL)",
+            // LD (HL) d8
+            0x36 => "LD (HL) d8",
+            // SCF
+            0x37 => "SCF",
+            // JR C, s8
+            0x38 => "JR C, s8",
+            // ADD HL, SP
+            0x39 => "ADD HL, SP",
+            // LD A, (HL-)
+            0x3A => "LD A, (HL-)",
+            // DEC SP
+            0x3B => "DEC SP",
+            // INC A
+            0x3C => "INC A",
+            // DEC A
+            0x3D => "DEC A",
+            // LD A, d8
+            0x3E => "LD A, d8",
+            // CCF
+            0x3F => "CCF",
+            // LD B, B
+            0x40 => "LD B, B",
+            // LD, B, C
+            0x41 => "LD, B, C",
+            // LD B, D
+            0x42 => "LD B, D",
+            // LD B, E
+            0x43 => "LD B, E",
+            // LD B, H
+            0x44 => "LD B, H",
+            // LD B, L
+            0x45 => "LD B, L",
+            // LD B, (HL)
+            0x46 => "LD B, (HL)",
+            // LD B, A
+            0x47 => "LD B, A",
+            // LD C, B
+            0x48 => "LD C, B",
+            // LD C, C
+            0x49 => "LD C, C",
+            // LD C, D
+            0x4A => "LD C, D",
+            // LD C, E
+            0x4B => "LD C, E",
+            // LD C, H
+            0x4C => "LD C, H",
+            // LD C, L
+            0x4D => "LD C, L",
+            // LD C, (HL)
+            0x4E => "LD C, (HL)",
+            // LD C, A
+            0x4F => "LD C, A",
+            // LD D, B
+            0x50 => "LD D, B",
+            // LD, D, C
+            0x51 => "LD, D, C",
+            // LD D, D
+            0x52 => "LD D, D",
+            // LD D, E
+            0x53 => "LD D, E",
+            // LD D, H
+            0x54 => "LD D, H",
+            // LD D, L
+            0x55 => "LD D, L",
+            // LD D, (HL)
+            0x56 => "LD D, (HL)",
+            // LD D, A
+            0x57 => "LD D, A",
+            // LD E, B
+            0x58 => "LD E, B",
+            // LD E, C
+            0x59 => "LD E, C",
+            // LD E, D
+            0x5A => "LD E, D",
+            // LD E, E
+            0x5B => "LD E, E",
+            // LD E, H
+            0x5C => "LD E, H",
+            // LD E, L
+            0x5D => "LD E, L",
+            // LD E, (HL)
+            0x5E => "LD E, (HL)",
+            // LD E, A
+            0x5F => "LD E, A",
+            // LD H, B
+            0x60 => "LD H, B",
+            // LD H, C
+            0x61 => "LD H, C",
+            // LD H, D
+            0x62 => "LD H, D",
+            // LD H, E
+            0x63 => "LD H, E",
+            // LD H, H
+            0x64 => "LD H, H",
+            // LD H, L
+            0x65 => "LD H, L",
+            // LD H, (HL)
+            0x66 => "LD H, (HL)",
+            // LD H, A
+            0x67 => "LD H, A",
+            // LD L, B
+            0x68 => "LD L, B",
+            // LD L, C
+            0x69 => "LD L, C",
+            // LD L, D
+            0x6A => "LD L, D",
+            // LD L, E
+            0x6B => "LD L, E",
+            // LD L, H
+            0x6C => "LD L, H",
+            // LD L, L
+            0x6D => "LD L, L",
+            // LD L, (HL)
+            0x6E => "LD L, (HL)",
+            // LD L, A
+            0x6F => "LD L, A",
+            // LD (HL), B
+            0x70 => "LD (HL), B",
+            // LD (HL), C
+            0x71 => "LD (HL), C",
+            // LD (HL), D
+            0x72 => "LD (HL), D",
+            // LD (HL), E
+            0x73 => "LD (HL), E",
+            // LD (HL), H
+            0x74 => "LD (HL), H",
+            // LD (HL), L
+            0x75 => "LD (HL), L",
+            // HALT
+            0x76 => "HALT",
+            // LD (HL), A
+            0x77 => "LD (HL), A",
+            // LD A, B
+            0x78 => "LD A, B",
+            // LD A, C
+            0x79 => "LD A, C",
+            // LD A, D
+            0x7A => "LD A, D",
+            // LD A, E
+            0x7B => "LD A, E",
+            // LD A, H
+            0x7C => "LD A, H",
+            // LD A, L
+            0x7D => "LD A, L",
+            // LD A, (HL)
+            0x7E => "LD A, (HL)",
+            // LD A, A
+            0x7F => "LD A, A",
+            // ADD A, B
+            0x80 => "ADD A, B",
+            // ADD A, C
+            0x81 => "ADD A, C",
+            // ADD A, D
+            0x82 => "ADD A, D",
+            // ADD A, E
+            0x83 => "ADD A, E",
+            // ADD A, H
+            0x84 => "ADD A, H",
+            // ADD A, L
+            0x85 => "ADD A, L",
+            // ADD A, (HL)
+            0x86 => "ADD A, (HL)",
+            // ADD A, A
+            0x87 => "ADD A, A",
+            // ADC A, B
+            0x88 => "ADC A, B",
+            // ADC A, C
+            0x89 => "ADC A, C",
+            // ADC A, D
+            0x8A => "ADC A, D",
+            // ADC A, E
+            0x8B => "ADC A, E",
+            // ADC A, H
+            0x8C => "ADC A, H",
+            // ADC A, L
+            0x8D => "ADC A, L",
+            // ADC A, (HL)
+            0x8E => "ADC A, (HL)",
+            // ADC A, A
+            0x8F => "ADC A, A",
+            // SUB A, B
+            0x90 => "SUB A, B",
+            // SUB A, C
+            0x91 => "SUB A, C",
+            // SUB A, D
+            0x92 => "SUB A, D",
+            // SUB A, E
+            0x93 => "SUB A, E",
+            // SUB A, H
+            0x94 => "SUB A, H",
+            // SUB A, L
+            0x95 => "SUB A, L",
+            // SUB A, (HL)
+            0x96 => "SUB A, (HL)",
+            // SUB A, A
+            0x97 => "SUB A, A",
+            // SBC A, B
+            0x98 => "SBC A, B",
+            // SBC A, C
+            0x99 => "SBC A, C",
+            // SBC A, D
+            0x9A => "SBC A, D",
+            // SBC A, E
+            0x9B => "SBC A, E",
+            // SBC A, H
+            0x9C => "SBC A, H",
+            // SBC A, L
+            0x9D => "SBC A, L",
+            // SBC A, (HL)
+            0x9E => "SBC A, (HL)",
+            // SBC A, A
+            0x9F => "SBC A, A",
+            // AND A, B
+            0xA0 => "AND A, B",
+            // AND A, C
+            0xA1 => "AND A, C",
+            // AND A, D
+            0xA2 => "AND A, D",
+            // AND A, E
+            0xA3 => "AND A, E",
+            // AND A, H
+            0xA4 => "AND A, H",
+            // AND A, L
+            0xA5 => "AND A, L",
+            // AND A, (HL)
+            0xA6 => "AND A, (HL)",
+            // AND A, A
+            0xA7 => "AND A, A",
+            // XOR A, B
+            0xA8 => "XOR A, B",
+            // XOR A, C
+            0xA9 => "XOR A, C",
+            // XOR A, D
+            0xAA => "XOR A, D",
+            // XOR A, E
+            0xAB => "XOR A, E",
+            // XOR A, H
+            0xAC => "XOR A, H",
+            // XOR A, L
+            0xAD => "XOR A, L",
+            // XOR A, (HL)
+            0xAE => "XOR A, (HL)",
+            // XOR A, A
+            0xAF => "XOR A, A",
+            // OR A, B
+            0xB0 => "OR A, B",
+            // OR A, C
+            0xB1 => "OR A, C",
+            // OR A, D
+            0xB2 => "OR A, D",
+            // OR A, E
+            0xB3 => "OR A, E",
+            // OR A, H
+            0xB4 => "OR A, H",
+            // OR A, L
+            0xB5 => "OR A, L",
+            // OR A, (HL)
+            0xB6 => "OR A, (HL)",
+            // OR A, A
+            0xB7 => "OR A, A",
+            // CP A, B
+            0xB8 => "CP A, B",
+            // CP A, C
+            0xB9 => "CP A, C",
+            // CP A, D
+            0xBA => "CP A, D",
+            // CP A, E
+            0xBB => "CP A, E",
+            // CP A, H
+            0xBC => "CP A, H",
+            // CP A, L
+            0xBD => "CP A, L",
+            // CP A, (HL)
+            0xBE => "CP A, (HL)",
+            // CP A, A
+            0xBF => "CP A, A",
+            // RET NZ
+            0xC0 => "RET NZ",
+            // POP BC
+            0xC1 => "POP BC",
+            // JP NZ, a16
+            0xC2 => "JP NZ, a16",
+            // JP a16
+            0xC3 => "JP a16",
+            // CALL NZ, a16
+            0xC4 => "CALL NZ, a16",
+            // PUSH BC
+            0xC5 => "PUSH BC",
+            // ADD A, d8
+            0xC6 => "ADD A, d8",
+            // RST 0
+            0xC7 => "RST 0",
+            // RET Z
+            0xC8 => "RET Z",
+            // RET
+            0xC9 => "RET",
+            // JP Z, a16
+            0xCA => "JP Z, a16",
+            // Double Instruction
+            0xCB => "Double Instruction",
+            // CALL Z, a16
+            0xCC => "CALL Z, a16",
+            // CALL a16
+            0xCD => "CALL a16",
+            // ADC A, d8
+            0xCE => "ADC A, d8",
+            // RST 1
+            0xCF => "RST 1",
+            // RET NC
+            0xD0 => "RET NC",
+            // POP DE
+            0xD1 => "POP DE",
+            // JP NC, a16
+            0xD2 => "JP NC, a16",
+            // CALL NC, a16
+            0xD4 => "CALL NC, a16",
+            // PUSH DE
+            0xD5 => "PUSH DE",
+            // SUB d8
+            0xD6 => "SUB d8",
+            // RST 2
+            0xD7 => "RST 2",
+            // RET C
+            0xD8 => "RET C",
+            // RETI
+            0xD9 => "RETI",
+            // JP C, a16
+            0xDA => "JP C, a16",
+            // CALL C, a16
+            0xDC => "CALL C, a16",
+            // SBC A, d8
+            0xDE => "SBC A, d8",
+            // RST 3
+            0xDF => "RST 3",
+            // LD (a8), A
+            0xE0 => "LD (a8), A",
+            // POP HL
+            0xE1 => "POP HL",
+            // LD (C), A
+            0xE2 => "LD (C), A",
+            // PUSH HL
+            0xE5 => "PUSH HL",
+            // AND d8
+            0xE6 => "AND d8",
+            // RST 4
+            0xE7 => "RST 4",
+            // ADD SP, s8
+            0xE8 => "ADD SP, s8",
+            // JP HL
+            0xE9 => "JP HL",
+            // LD (a16), A
+            0xEA => "LD (a16), A",
+            // XOR d8
+            0xEE => "XOR d8",
+            // RST 5
+            0xEF => "RST 5",
+            // LD A, (a8)
+            0xF0 => "LD A, (a8)",
+            // POP AF
+            0xF1 => "POP AF",
+            // LD A, (C)
+            0xF2 => "LD A, (C)",
+            // DI
+            0xF3 => "DI",
+            // PUSH AF
+            0xF5 => "PUSH AF",
+            // OR d8
+            0xF6 => "OR d8",
+            // RST 6
+            0xF7 => "RST 6",
+            // LD HL, SP+s8
+            0xF8 => "LD HL, SP+s8",
+            // LD SP, HL
+            0xF9 => "LD SP, HL",
+            // LD A, (a16)
+            0xFA => "LD A, (a16)",
+            // EI
+            0xFB => "EI",
+            // CP d8
+            0xFE => "CP d8",
+            // RST 7
+            0xFF => "RST 7",
+            0xD3 | 0xDB | 0xDD | 0xE3 | 0xE4 | 0xEB | 0xEC | 0xED | 0xF4 | 0xFC | 0xFD => "Undef",
+        }
+    }
 
     /// Decodes and executes the next instruction regardless of current cycle counts or interrupt
     pub fn next_instruction(&mut self, mem: &mut Memory) {

@@ -130,17 +130,17 @@ pub fn gui_mem(ui: &mut Ui, mem: &Memory, pc: u16) {
 }
 
 pub fn gui_tiles(ui: &mut Ui, mem: &Memory) {
+    const PIXEL_SIZE: usize = 3;
+    const SIZE: usize = PIXEL_SIZE * 8 * 16 + 15;
     let tiles = mem.get_tiles(255);
-    let pixel_size = 3;
-    let size = pixel_size * 8 * 16 + 15;
-    let (_, space) = ui.allocate_space(Vec2::new(size as f32, size as f32));
+    let (_, space) = ui.allocate_space(Vec2::new(SIZE as f32, SIZE as f32));
     let painter = ui.painter_at(space);
 
     for y in 0..16 {
         for x in 0..16 {
             let tile = &tiles[y * 16 + x];
-            let tile_x = space.left() + (x * (pixel_size * 8) + x) as f32;
-            let tile_y = space.top() + (y * (pixel_size * 8) + y) as f32;
+            let tile_x = space.left() + (x * (PIXEL_SIZE * 8) + x) as f32;
+            let tile_y = space.top() + (y * (PIXEL_SIZE * 8) + y) as f32;
             for py in 0..8 {
                 for px in 0..8 {
                     let col_id = tile.pixels[py * 8 + px];
@@ -150,10 +150,10 @@ pub fn gui_tiles(ui: &mut Ui, mem: &Memory) {
                     painter.rect_filled(
                         Rect::from_min_size(
                             Pos2::new(
-                                tile_x + (px * pixel_size) as f32,
-                                tile_y + (py * pixel_size) as f32,
+                                tile_x + (px * PIXEL_SIZE) as f32,
+                                tile_y + (py * PIXEL_SIZE) as f32,
                             ),
-                            Vec2::new(pixel_size as f32, pixel_size as f32),
+                            Vec2::new(PIXEL_SIZE as f32, PIXEL_SIZE as f32),
                         ),
                         Rounding::none(),
                         Color32::from_gray(col_id * 64),
@@ -162,4 +162,37 @@ pub fn gui_tiles(ui: &mut Ui, mem: &Memory) {
             }
         }
     }
+}
+
+pub fn gui_trace(
+    ui: &mut Ui,
+    pc: &[u16],
+    ops: &[&'static str],
+    summary: &[String],
+    next_op: &str,
+    next_summary: &str,
+) {
+    ui.set_width(400f32);
+    ui.columns(3, |ui| {
+        ui[0].label("Next:");
+        ui[1].label(next_op);
+        ui[2].label(next_summary);
+    });
+
+    ui.separator();
+
+    ScrollArea::new([false, true]).show_rows(
+        ui,
+        ui.text_style_height(&egui::TextStyle::Body),
+        ops.len(),
+        |ui, range| {
+            ui.columns(3, |ui| {
+                for i in range {
+                    ui[0].label(&format!("{:#04X}", pc[i]));
+                    ui[1].label(ops[i]);
+                    ui[2].label(&summary[i]);
+                }
+            })
+        },
+    );
 }
